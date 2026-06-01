@@ -18,17 +18,18 @@ typedef struct {
 
 // Estructura principal de la Nave
 typedef struct {
+    int id;            
     int pos_x;
     int pos_y;
     int oxigeno;
     int combustible;
     e_estado_nave estado;
     t_inventario inventario;
-    pthread_mutex_t mutex_nave; // Mutex para proteger TODA la estructura
+    pthread_mutex_t mutex_nave;
 } t_nave;
 
 // Promesas de funciones (Interfaz pública)
 void inicializar_nave(t_nave* nave, int x_inicial, int y_inicial);
 void destruir_nave(t_nave* nave);
 
-#endif // NAVE_H
+#endif 
