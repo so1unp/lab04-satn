@@ -1,6 +1,8 @@
 CC=gcc
 BIN=./bin
-CFLAGS=-g -Wall -Wextra -Wshadow -Wconversion -Wunreachable-code
+
+# Agregamos -lpthread (hilos) y -lncurses (interfaz gráfica) a las flags de compilación
+CFLAGS=-g -Wall -Wextra -Wshadow -Wconversion -Wunreachable-code -lpthread -lncurses
 
 PROG=nave estacion servidor
 
@@ -9,10 +11,19 @@ LIST=$(addprefix $(BIN)/, $(PROG))
 .PHONY: all
 all: $(LIST)
 
+# Regla específica para compilar 'nave'. 
+# Junta el punto de entrada (nave_main.c) con la lógica del módulo (nave.c)
+$(BIN)/nave: nave_main.c nave.c
+	@mkdir -p $(BIN)
+	$(CC) -o $@ $^ $(CFLAGS)
+
+# Regla genérica para los otros procesos individuales (estacion y servidor)
 $(BIN)/%: %.c
+	@mkdir -p $(BIN)
 	$(CC) -o $@ $< $(CFLAGS)
 
 %: %.c
+	@mkdir -p $(BIN)
 	$(CC) -o $(BIN)/$@ $< $(CFLAGS)
 
 test:
