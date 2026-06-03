@@ -2,9 +2,10 @@
 #define ASTEROIDE_H
 
 typedef struct {
-    int id;
-    int pepenio;
-    int roberterio;
+    int deuterio;
+    int mutexio;
+    int semaforita;
+    int kernelio;
     bool state;
 } Asteroid;
 
