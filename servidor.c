@@ -4,6 +4,18 @@
 #include <defaultconfig.h>
 #include <map.h>
 
+#include <stdio.h>
+/* shm_* stuff, and mmap() */
+#include <sys/mman.h>
+#include <sys/types.h>
+/* exit() etc */
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+/* for random() stuff */
+#include <stdlib.h>
+#include <time.h>
+
 int NUMBER_STATIONS = 0;
 int NUMBER_ASTEROIDS = 0;
 int MAP_HEIGHT = 0;
@@ -12,6 +24,9 @@ int MAXIMUM_QUANTITY_DEUTERIO = 0;
 int MAXIMUM_QUANTITY_MUTEXIO = 0;
 int MAXIMUM_QUANTITY_SEMAFORITA = 0;
 int MAXIMUM_QUANTITY_KERNELIO = 0;
+
+int shmFileDescriptor;
+Map gameMap;
 
 int configurationReading () {
     FILE *file = fopen("config.txt", "r");
@@ -59,6 +74,27 @@ int configurationReading () {
     fclose(file);
     return 0;
 }
+
+int makeMap() {
+
+    int shared_seg_size = (1 * sizeof(Map));   /* want shared segment capable of storing 1 message */
+    struct msg_s *shared_msg;      /* the shared segment, and head of the messages list */    
+
+    /* creating the shared memory object    --  shm_open()
+		O_EXCL  - share memory object with the given name already exists, return an error
+		S_IRWXU - read, write, execute/search by owner 
+		S_IRWXG - read, write, execute/search by group 
+	*/
+    shmFileDescriptor = shm_open(SHARED_MEMORY_PATH, O_CREAT | O_RDWR, S_IRWXU | S_IRWXG);
+    if (shmFileDescriptor < 0) {
+        perror("In shm_open()");
+        exit(1);
+    }
+    fprintf(stderr, "Created shared memory object %s\n", SHARED_MEMORY_PATH);
+
+    return 0;
+}
+
 
 
 

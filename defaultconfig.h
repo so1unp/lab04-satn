@@ -2,6 +2,7 @@
 #define DEFAULTCONFIG_H
 
 #define CONFIG_PATH "config.txt"
+#define SHARED_MEMORY_PATH "/shared-map-satn"
 
 #define DEFAULT_NUMBER_STATIONS 3
 #define DEFAULT_NUMBER_ASTEROIDS 20
