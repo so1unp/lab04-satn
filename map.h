@@ -3,6 +3,7 @@
 
 #include <asteroid.h>
 #include <pthread.h>
+#include <defaultconfig.h>
 
 typedef enum {
     EMPTY,
@@ -19,15 +20,12 @@ typedef struct {
     pthread_mutex_t mutex;
 } MapCell;
 
-//TO DELETE
-#define MAP_WIDTH  0
-#define MAP_HEIGHT  0
-//TO DELETE
 
 typedef struct {
     int height;
     int width;
-    MapCell map[MAP_WIDTH][MAP_HEIGHT];
+    MapCell map[DEFAULT_MAP_WIDTH][DEFAULT_MAP_HEIGHT];
 } Map;
+
 
 #endif 
