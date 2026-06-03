@@ -1,19 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <defaultconfig.h>
 
-char * NUMBER_OF_SPACE_STATIONS = 0;
-char * NUMBER_ASTEROIDS = 0;
-char * MAP_WIDTH = 0;
-char * MAP_HIGHT = 0;
-char * MAXIMUM_QUANTITY_PEPENIO = 0;
-char * MAXIMUM_QUANTITY_ROBERTERIO = 0;
+int NUMBER_STATIONS = 0;
+int NUMBER_ASTEROIDS = 0;
+int MAP_HEIGHT = 0;
+int MAP_WIDTH = 0;
+int MAXIMUM_QUANTITY_PEPENIO = 0;
+int MAXIMUM_QUANTITY_ROBERTERIO = 0;
 
 int configurationReading () {
     FILE *file = fopen("config.txt", "r");
     if (file == NULL) {
         printf("Error opening configuration file\n");
-        return 1;
+        NUMBER_STATIONS = DEFAULT_NUMBER_STATIONS;
+        NUMBER_ASTEROIDS = DEFAULT_NUMBER_ASTEROIDS;
+        MAP_HEIGHT = DEFAULT_MAP_HEIGHT;
+        MAP_WIDTH = DEFAULT_MAP_WIDTH;
+        MAXIMUM_QUANTITY_PEPENIO = DEFAULT_MAXIMUM_QUANTITY_PEPENIO;
+        MAXIMUM_QUANTITY_ROBERTERIO = DEFAULT_MAXIMUM_QUANTITY_ROBERTERIO;
+        return -1;
     }
     
     char line[100];
@@ -25,18 +32,18 @@ int configurationReading () {
 
         if (sscanf(line, "%[^=] = %s", key, value) == 2) {
             if (strcmp(key, "NUMBER_OF_SPACE_STATIONS") == 0) {
-                NUMBER_OF_SPACE_STATIONS = value;
+                NUMBER_STATIONS = aoi(value);
             } else if (strcmp(key, "NUMBER_ASTEROIDS") == 0) {
-                NUMBER_ASTEROIDS = value;
+                NUMBER_ASTEROIDS = aoi(value);
             } else if (strcmp(key, "MAP_WIDTH") == 0) {
-                MAP_WIDTH = value;
-            } else if (strcmp(key, "MAP_HIGHT") == 0) {
-                MAP_HIGHT = value;
+                MAP_WIDTH = aoi(value);
+            } else if (strcmp(key, "MAP_HEIGHT") == 0) {
+                MAP_HEIGHT = aoi(value);
             } else if (strcmp(key, "MAXIMUM_QUANTITY_PEPENIO") == 0) {
-                MAXIMUM_QUANTITY_PEPENIO = value;
-            } else {
-                MAXIMUM_QUANTITY_ROBERTERIO = value;
-            } 
+                MAXIMUM_QUANTITY_PEPENIO = aoi(value);
+            } else if (strcmp(key, "MAXIMUM_QUANTITY_ROBERTERIO") == 0) {
+                MAXIMUM_QUANTITY_ROBERTERIO = aoi(value);
+            }
         }
     }
     
