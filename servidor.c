@@ -2,13 +2,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <defaultconfig.h>
+#include <map.h>
 
 int NUMBER_STATIONS = 0;
 int NUMBER_ASTEROIDS = 0;
 int MAP_HEIGHT = 0;
 int MAP_WIDTH = 0;
-int MAXIMUM_QUANTITY_PEPENIO = 0;
-int MAXIMUM_QUANTITY_ROBERTERIO = 0;
+int MAXIMUM_QUANTITY_DEUTERIO = 0;
+int MAXIMUM_QUANTITY_MUTEXIO = 0;
+int MAXIMUM_QUANTITY_SEMAFORITA = 0;
+int MAXIMUM_QUANTITY_KERNELIO = 0;
 
 int configurationReading () {
     FILE *file = fopen("config.txt", "r");
@@ -18,8 +21,10 @@ int configurationReading () {
         NUMBER_ASTEROIDS = DEFAULT_NUMBER_ASTEROIDS;
         MAP_HEIGHT = DEFAULT_MAP_HEIGHT;
         MAP_WIDTH = DEFAULT_MAP_WIDTH;
-        MAXIMUM_QUANTITY_PEPENIO = DEFAULT_MAXIMUM_QUANTITY_PEPENIO;
-        MAXIMUM_QUANTITY_ROBERTERIO = DEFAULT_MAXIMUM_QUANTITY_ROBERTERIO;
+        MAXIMUM_QUANTITY_DEUTERIO = DEFAULT_MAXIMUM_QUANTITY_DEUTERIO;
+        MAXIMUM_QUANTITY_MUTEXIO = DEFAULT_MAXIMUM_QUANTITY_MUTEXIO;
+        MAXIMUM_QUANTITY_SEMAFORITA = DEFAULT_MAXIMUM_QUANTITY_SEMAFORITA;
+        MAXIMUM_QUANTITY_KERNELIO = DEFAULT_MAXIMUM_QUANTITY_KERNELIO;
         return -1;
     }
     
@@ -39,10 +44,14 @@ int configurationReading () {
                 MAP_WIDTH = aoi(value);
             } else if (strcmp(key, "MAP_HEIGHT") == 0) {
                 MAP_HEIGHT = aoi(value);
-            } else if (strcmp(key, "MAXIMUM_QUANTITY_PEPENIO") == 0) {
-                MAXIMUM_QUANTITY_PEPENIO = aoi(value);
-            } else if (strcmp(key, "MAXIMUM_QUANTITY_ROBERTERIO") == 0) {
-                MAXIMUM_QUANTITY_ROBERTERIO = aoi(value);
+            } else if (strcmp(key, "MAXIMUM_QUANTITY_DEUTERIO") == 0) {
+                MAXIMUM_QUANTITY_DEUTERIO = aoi(value);
+            } else if (strcmp(key, "MAXIMUM_QUANTITY_MUTEXIO") == 0) {
+                MAXIMUM_QUANTITY_MUTEXIO = aoi(value);
+            } else if (strcmp(key, "MAXIMUM_QUANTITY_SEMAFORITA") == 0) {
+                MAXIMUM_QUANTITY_SEMAFORITA = aoi(value);
+            } else if (strcmp(key, "MAXIMUM_QUANTITY_KERNELIO") == 0) {
+                MAXIMUM_QUANTITY_KERNELIO = aoi(value);
             }
         }
     }
@@ -50,6 +59,8 @@ int configurationReading () {
     fclose(file);
     return 0;
 }
+
+
 
 int main() {
     exit(EXIT_SUCCESS);

@@ -3,6 +3,7 @@
 
 #include <asteroid.h>
 #include <pthread.h>
+#include <defaultconfig.h>
 
 typedef enum {
     EMPTY,
@@ -11,27 +12,19 @@ typedef enum {
     STATION
 } EntityType;
 
-
 typedef struct {
     EntityType typeStored;
-    union {
-        //SHIP
-        Asteroid asteroid;
-        //STATION
-    } entities;
+    //SHIP
+    Asteroid asteroid;
+    //STATION
+    pthread_mutex_t mutex;
 } MapCell;
 
-
-//TO DELETE
-#define MAP_WIDTH  0
-#define MAP_HEIGHT  0
-//TO DELETE
 
 typedef struct {
     int height;
     int width;
-    pthread_mutex_t mutex_cells[MAP_WIDTH][MAP_HEIGHT];
-    MapCell map[MAP_WIDTH][MAP_HEIGHT];
+    MapCell map[DEFAULT_MAP_WIDTH][DEFAULT_MAP_HEIGHT];
 } Map;
 
 
