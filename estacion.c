@@ -14,7 +14,6 @@ typedef struct
 
     // Control de Hangar y Señales
     int hangarCapacity;
-    int currentShips;
     pid_t shipPids[MAX_HANGAR_CAPACITY]; // Arreglo para guardar los PID de las naves
     
     // Combustible
