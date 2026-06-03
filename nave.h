@@ -3,22 +3,22 @@
 
 #include <pthread.h>
 
-// Definición de los estados posibles de la nave
 typedef enum {
     ESTADO_VIVO,
     ESTADO_GAMEOVER_OXIGENO,
     ESTADO_GAMEOVER_COMBUSTIBLE
 } e_estado_nave;
 
-// Estructura para el inventario de recursos recolectados
+// Inventario con los materiales reales de la consigna
 typedef struct {
-    int pepenio;     // Mineral para fabricación de oxígeno
-    int roberterio;  // Mineral para fabricación de combustible
+    int deuterio;    // Combustible
+    int mutexio;     // Oxígeno / Usos múltiples (Común)
+    int semaforita;  // Oxígeno / Usos múltiples (Raro)
+    int kernelio;    // Oxígeno / Usos múltiples (Valioso)
 } t_inventario;
 
-// Estructura principal de la Nave
 typedef struct {
-    int id;            
+    int id;
     int pos_x;
     int pos_y;
     int oxigeno;
@@ -28,8 +28,7 @@ typedef struct {
     pthread_mutex_t mutex_nave;
 } t_nave;
 
-// Promesas de funciones (Interfaz pública)
 void inicializar_nave(t_nave* nave, int x_inicial, int y_inicial);
 void destruir_nave(t_nave* nave);
 
-#endif 
+#endif // NAVE_H
