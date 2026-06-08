@@ -2,7 +2,7 @@ CC=gcc
 BIN=./bin/.
 
 
-CFLAGS=-g -Wall -Wextra -Wshadow -Wconversion -Wunreachable-code -I "."
+CFLAGS=-g -Wall -Wextra -Wshadow -Wconversion -Wunreachable-code -I "./header/."
 
 
 LDFLAGS=-lpthread -lncurses
