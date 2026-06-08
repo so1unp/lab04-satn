@@ -1,9 +1,11 @@
 #ifndef MAP_H
 #define MAP_h
 
+#include <nave.h>
 #include <asteroid.h>
 #include <pthread.h>
 #include <defaultconfig.h>
+#include <semaphore.h> 
 
 typedef enum {
     EMPTY,
@@ -14,16 +16,14 @@ typedef enum {
 
 typedef struct {
     EntityType typeStored;
-    //SHIP
+    t_nave ship;
     Asteroid asteroid;
     //STATION
-    pthread_mutex_t mutex;
+    sem_t mutex;
 } MapCell;
 
 
 typedef struct {
-    int height;
-    int width;
     MapCell map[DEFAULT_MAP_WIDTH][DEFAULT_MAP_HEIGHT];
 } Map;
 
