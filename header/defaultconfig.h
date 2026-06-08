@@ -3,6 +3,9 @@
 
 #define CONFIG_PATH "config.txt"
 #define SHARED_MEMORY_PATH "/shared-map-satn"
+#define SERVER_MOVEMENT_COMMUNICATION_QUEUE_PATH "/movement-communication-queue-satn"
+#define SERVER_EXTRACTION_COMMUNICATION_QUEUE_PATH "/extraction-communication-queue-satn"
+
 
 #define DEFAULT_NUMBER_STATIONS 3
 #define DEFAULT_NUMBER_ASTEROIDS 20

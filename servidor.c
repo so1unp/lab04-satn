@@ -3,11 +3,13 @@
 #include <string.h>
 #include <defaultconfig.h>
 #include <map.h>
+#include <communication.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <mqueue.h>
 
 int NUMBER_STATIONS = 0;
 int NUMBER_ASTEROIDS = 0;
@@ -21,6 +23,9 @@ int MAXIMUM_QUANTITY_KERNELIO = 0;
 Map *gameMap;
 int sharedMemoryFd;
 int shared_seg_size = (1 * sizeof(Map));
+
+mqd_t shipMovementCommunicationQueue;
+mqd_t shipExtractionCommunicationQueue;
 
 int configurationReading () {
     FILE *file = fopen("config.txt", "r");
@@ -95,6 +100,26 @@ int makeMap() {
     }
 
     return 0;
+}
+
+int createQueues(int queueSize) {
+    struct mq_attr attr;
+
+    attr.mq_flags = 0;
+    attr.mq_maxmsg = queueSize;
+    attr.mq_msgsize = (1*sizeof(msg_communication_movement));
+    attr.mq_curmsgs = 0;
+
+    //QUEUE PERMISSIONS
+    shipMovementCommunicationQueue = mq_open(SERVER_MOVEMENT_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDWR, 0644, &attr);
+
+    attr.mq_msgsize = (1*sizeof(msg_communication_extraction));
+    shipExtractionCommunicationQueue = mq_open(SERVER_EXTRACTION_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDWR, 0644, &attr);
+    
+    if (shipMovementCommunicationQueue == (mqd_t)-1 || shipExtractionCommunicationQueue == (mqd_t)-1) {
+        perror("Error creating message queues");
+        exit(1);
+    }
 }
 
 int printMap() {
