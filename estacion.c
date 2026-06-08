@@ -1,29 +1,25 @@
-#ifndef STATION_H
-#define STATION_H
+#include <stdio.h>
+#include <unistd.h>
+#include "estacion.h"
+#include <signal.h>
 
-#include <stdlib.h>
-#include <stdbool.h>
+void inicializar_estacion(station *a_station, int pos_x, int pos_y) {
+    if (a_station == NULL)
+        return;
 
-#define MAX_HANGAR_CAPACITY 3
+    a_station->pos_x = pos_x;
+    a_station->pos_y = pos_y;
+    a_station->fuel = 100; 
+    a_station->fuelWarningSent = false;
+    a_station->isDestroyed = false;
+}
 
-typedef struct
-{
-    char name[30];
-    int pos_x;
-    int pos_y;
-
-    // Control de Hangar y Señales
-    int hangarCapacity;
-    pid_t shipPids[MAX_HANGAR_CAPACITY]; // Arreglo para guardar los PID de las naves
+void dar_aviso_naves(station *a_station) {
     
-    // Combustible
-    int fuelCapacity;
-    int currentFuel;
-
-    // Estado de la Estación
-    bool fuelWarningSent;  // true si ya notificó a las naves
-    bool isDestroyed;      // true si se quedó sin combustible y explotó
-
-} station;
-
-#endif
+    if (a_station == NULL)
+        return;
+    if (a_station->fuelWarningSent)
+        return;
+    
+    // Mandar un mensaje a todas las naves del servidor
+}
