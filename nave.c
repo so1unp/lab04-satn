@@ -1,21 +1,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ncurses.h>
-#include <unistd.h> // Requerido para usleep
+#include <unistd.h> // Requerido para usleep y sleep
 #include "nave.h"
 
 #define TECLA_SALIR 'q'
 #define TECLA_MINAR 'm'
 
-// Dimensiones del mapa del juego
-#define MAPA_ALTO 20
-#define MAPA_ANCHO 40
+#define MAPA_ALTO 15
+#define MAPA_ANCHO 50
 
-// Matriz global que simula el espacio
+
 char mapa_espacial[MAPA_ALTO][MAPA_ANCHO];
 
-// Variable para guardar el caracter visual de la nave segun su direccion
+
 char caracter_nave = '^';
+
 
 volatile int juego_ejecutando = 1;
 
@@ -138,14 +138,35 @@ void renderizar_todo_ncurses(t_nave* nave) {
 void* hilo_renderizador(void* arg) {
     t_nave* nave_compartida = (t_nave*)arg;
 
-    // El hilo dibuja la pantalla constantemente basandose en el estado actual de la estructura
     while (juego_ejecutando) {
         renderizar_todo_ncurses(nave_compartida);
-        
-        // Espera 50 milisegundos entre refrescos (~20 FPS)
         usleep(50000); 
     }
-    
+    return NULL;
+}
+
+// --- HILO INDEPENDIENTE DE SOPORTE VITAL (Consumo de Oxigeno) ---
+
+void* hilo_soporte_vital(void* arg) {
+    t_nave* nave_compartida = (t_nave*)arg;
+
+    while (juego_ejecutando) {
+
+        sleep(1); 
+
+        pthread_mutex_lock(&nave_compartida->mutex_nave);
+
+        if (nave_compartida->estado == ESTADO_VIVO) {
+            nave_compartida->oxigeno -= 1; // Consume 1% de oxigeno por segundo
+
+            if (nave_compartida->oxigeno <= 0) {
+                nave_compartida->oxigeno = 0;
+                nave_compartida->estado = ESTADO_GAMEOVER_OXIGENO;
+            }
+        }
+
+        pthread_mutex_unlock(&nave_compartida->mutex_nave);
+    }
     return NULL;
 }
 
@@ -155,12 +176,13 @@ int main() {
     t_nave mi_nave;
     int ch;
     pthread_t thread_visual;
+    pthread_t thread_oxigeno;
 
     generar_mapa_local();
     inicializar_nave(&mi_nave, 5, 5);
     inicializar_visuales();
 
-    // Creamos el hilo encargado exclusivamente de la vista
+
     if (pthread_create(&thread_visual, NULL, hilo_renderizador, (void*)&mi_nave) != 0) {
         perror("Error al crear el hilo de renderizado");
         finalizar_visuales();
@@ -168,7 +190,17 @@ int main() {
         return 1;
     }
 
-    // El hilo principal ahora se queda ESPERANDO TECLAS unicamente
+
+    if (pthread_create(&thread_oxigeno, NULL, hilo_soporte_vital, (void*)&mi_nave) != 0) {
+        perror("Error al crear el hilo de soporte vital");
+        juego_ejecutando = 0;
+        pthread_join(thread_visual, NULL);
+        finalizar_visuales();
+        destruir_nave(&mi_nave);
+        return 1;
+    }
+
+
     while ((ch = getch()) != TECLA_SALIR) {
         
         pthread_mutex_lock(&mi_nave.mutex_nave);
@@ -179,8 +211,7 @@ int main() {
                     if (mi_nave.pos_y > 1 && mapa_espacial[mi_nave.pos_y - 1][mi_nave.pos_x] == ' ') {
                         mi_nave.pos_y--;
                         caracter_nave = '^';
-                        mi_nave.combustible -= 2;
-                        mi_nave.oxigeno -= 1;
+                        mi_nave.combustible -= 2; 
                     }
                     break;
                 case KEY_DOWN:
@@ -188,7 +219,6 @@ int main() {
                         mi_nave.pos_y++;
                         caracter_nave = 'v';
                         mi_nave.combustible -= 2;
-                        mi_nave.oxigeno -= 1;
                     }
                     break;
                 case KEY_LEFT:
@@ -196,7 +226,6 @@ int main() {
                         mi_nave.pos_x--;
                         caracter_nave = '<';
                         mi_nave.combustible -= 2;
-                        mi_nave.oxigeno -= 1;
                     }
                     break;
                 case KEY_RIGHT:
@@ -204,7 +233,6 @@ int main() {
                         mi_nave.pos_x++;
                         caracter_nave = '>';
                         mi_nave.combustible -= 2;
-                        mi_nave.oxigeno -= 1;
                     }
                     break;
 
@@ -223,21 +251,22 @@ int main() {
                     break;
             }
 
-            if (mi_nave.oxigeno <= 0) { mi_nave.oxigeno = 0; mi_nave.estado = ESTADO_GAMEOVER_OXIGENO; }
-            if (mi_nave.combustible <= 0) { mi_nave.combustible = 0; mi_nave.estado = ESTADO_GAMEOVER_COMBUSTIBLE; }
+            if (mi_nave.combustible <= 0) {
+                mi_nave.combustible = 0;
+                mi_nave.estado = ESTADO_GAMEOVER_COMBUSTIBLE;
+            }
         }
         
         pthread_mutex_unlock(&mi_nave.mutex_nave);
-        
     }
 
-    // Apagado controlado
-    juego_ejecutando = 0;           // Indicamos al bucle del hilo que termine
-    pthread_join(thread_visual, NULL); // Esperamos que el hilo de render finalice limpio
+    juego_ejecutando = 0;           
+    pthread_join(thread_visual, NULL); 
+    pthread_join(thread_oxigeno, NULL); 
 
     finalizar_visuales();
     destruir_nave(&mi_nave);
 
-    printf("Simulacion multihilo finalizada con exito.\n");
+    printf("Simulacion multihilo con soporte vital finalizada con exito.\n");
     return 0;
 }
