@@ -1,20 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ncurses.h>
+#include <unistd.h> // Requerido para usleep
 #include "nave.h"
 
 #define TECLA_SALIR 'q'
 #define TECLA_MINAR 'm'
 
 // Dimensiones del mapa del juego
-#define MAPA_ALTO 15
-#define MAPA_ANCHO 50
+#define MAPA_ALTO 20
+#define MAPA_ANCHO 40
 
 // Matriz global que simula el espacio
 char mapa_espacial[MAPA_ALTO][MAPA_ANCHO];
 
 // Variable para guardar el caracter visual de la nave segun su direccion
 char caracter_nave = '^';
+
+volatile int juego_ejecutando = 1;
 
 // --- FUNCIONES DEL MODELO ---
 
@@ -45,7 +48,6 @@ void destruir_nave(t_nave* nave) {
     }
 }
 
-// Genera un mapa de prueba con asteroides (A) y estaciones (E)
 void generar_mapa_local() {
     for (int y = 0; y < MAPA_ALTO; y++) {
         for (int x = 0; x < MAPA_ANCHO; x++) {
@@ -56,20 +58,17 @@ void generar_mapa_local() {
             }
         }
     }
-    // Colocamos algunos asteroides y una estacion fijos
     mapa_espacial[3][15] = 'A';
     mapa_espacial[4][16] = 'A';
     mapa_espacial[10][8]  = 'A';
     mapa_espacial[7][35] = 'E'; 
 }
 
-// Funcion auxiliar para verificar si hay un objetivo cerca de la nave
-// Retorna 1 si encuentra el caracter buscado en las 4 direcciones adyacentes
 int verificar_proximidad(int nave_x, int nave_y, char objetivo) {
-    if (mapa_espacial[nave_y - 1][nave_x] == objetivo) return 1; // Arriba
-    if (mapa_espacial[nave_y + 1][nave_x] == objetivo) return 1; // Abajo
-    if (mapa_espacial[nave_y][nave_x - 1] == objetivo) return 1; // Izquierda
-    if (mapa_espacial[nave_y][nave_x + 1] == objetivo) return 1; // Derecha
+    if (mapa_espacial[nave_y - 1][nave_x] == objetivo) return 1; 
+    if (mapa_espacial[nave_y + 1][nave_x] == objetivo) return 1; 
+    if (mapa_espacial[nave_y][nave_x - 1] == objetivo) return 1; 
+    if (mapa_espacial[nave_y][nave_x + 1] == objetivo) return 1; 
     return 0;
 }
 
@@ -134,18 +133,42 @@ void renderizar_todo_ncurses(t_nave* nave) {
     refresh();
 }
 
+// --- HILO INDEPENDIENTE DE RENDERIZADO ---
+
+void* hilo_renderizador(void* arg) {
+    t_nave* nave_compartida = (t_nave*)arg;
+
+    // El hilo dibuja la pantalla constantemente basandose en el estado actual de la estructura
+    while (juego_ejecutando) {
+        renderizar_todo_ncurses(nave_compartida);
+        
+        // Espera 50 milisegundos entre refrescos (~20 FPS)
+        usleep(50000); 
+    }
+    
+    return NULL;
+}
+
 // --- PROGRAMA PRINCIPAL ---
 
 int main() {
     t_nave mi_nave;
     int ch;
+    pthread_t thread_visual;
 
     generar_mapa_local();
     inicializar_nave(&mi_nave, 5, 5);
     inicializar_visuales();
 
-    renderizar_todo_ncurses(&mi_nave);
+    // Creamos el hilo encargado exclusivamente de la vista
+    if (pthread_create(&thread_visual, NULL, hilo_renderizador, (void*)&mi_nave) != 0) {
+        perror("Error al crear el hilo de renderizado");
+        finalizar_visuales();
+        destruir_nave(&mi_nave);
+        return 1;
+    }
 
+    // El hilo principal ahora se queda ESPERANDO TECLAS unicamente
     while ((ch = getch()) != TECLA_SALIR) {
         
         pthread_mutex_lock(&mi_nave.mutex_nave);
@@ -153,7 +176,6 @@ int main() {
         if (mi_nave.estado == ESTADO_VIVO) {
             switch (ch) {
                 case KEY_UP:
-                    // Verifica que el casillero de arriba este vacio antes de avanzar
                     if (mi_nave.pos_y > 1 && mapa_espacial[mi_nave.pos_y - 1][mi_nave.pos_x] == ' ') {
                         mi_nave.pos_y--;
                         caracter_nave = '^';
@@ -188,7 +210,6 @@ int main() {
 
                 case TECLA_MINAR:
                 case 'M': 
-                    // Logica corregida: Mina si tiene un asteroide 'A' al lado
                     if (verificar_proximidad(mi_nave.pos_x, mi_nave.pos_y, 'A')) {
                         mi_nave.combustible -= 5; 
                         mi_nave.inventario.deuterio += 12;
@@ -207,12 +228,16 @@ int main() {
         }
         
         pthread_mutex_unlock(&mi_nave.mutex_nave);
-        renderizar_todo_ncurses(&mi_nave);
+        
     }
+
+    // Apagado controlado
+    juego_ejecutando = 0;           // Indicamos al bucle del hilo que termine
+    pthread_join(thread_visual, NULL); // Esperamos que el hilo de render finalice limpio
 
     finalizar_visuales();
     destruir_nave(&mi_nave);
 
-    printf("Simulacion grafica del espacio finalizada con exito.\n");
+    printf("Simulacion multihilo finalizada con exito.\n");
     return 0;
 }
