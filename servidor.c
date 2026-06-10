@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <mqueue.h>
+#include <asteroid.h>
 
 int NUMBER_STATIONS = 0;
 int NUMBER_ASTEROIDS = 0;
@@ -77,21 +78,40 @@ int configurationReading () {
     return 0;
 }
 
-int makeMap() {
 
+int generateAsteroids () {
+    for (int i = 0; i < NUMBER_ASTEROIDS; i++) {
+        int position_x = rand() % MAP_WIDTH;
+        int position_y = rand() % MAP_HEIGHT;
+        while(gameMap->map[position_x][position_y].typeStored == ASTEROID) {
+            position_x = rand() % MAP_WIDTH;
+            position_y = rand() % MAP_HEIGHT;
+        }
+        
+        gameMap->map[position_x][position_y].asteroid.deuterio = rand() % (MAXIMUM_QUANTITY_DEUTERIO + 1);
+        gameMap->map[position_x][position_y].asteroid.kernelio = rand() % (MAXIMUM_QUANTITY_KERNELIO + 1);
+        gameMap->map[position_x][position_y].asteroid.mutexio = rand() % (MAXIMUM_QUANTITY_MUTEXIO + 1);
+        gameMap->map[position_x][position_y].asteroid.semaforita = rand() % (MAXIMUM_QUANTITY_SEMAFORITA + 1);
+        gameMap->map[position_x][position_y].typeStored = ASTEROID;
+        
+    }
+}
+
+int makeMap() {
+    
     sharedMemoryFd = shm_open(SHARED_MEMORY_PATH, O_CREAT | O_RDWR, S_IRWXU | S_IRWXG);
     if (sharedMemoryFd < 0) {
         perror("In shm_open()");
         exit(1);
     }
     ftruncate(sharedMemoryFd, shared_seg_size);
-
+    
     gameMap = (Map *)mmap(NULL, shared_seg_size, PROT_READ | PROT_WRITE, MAP_SHARED, sharedMemoryFd, 0);
     if (gameMap == NULL) {
         perror("In mmap()");
         exit(1);
     }
-
+    
     for (int i = 0; i < DEFAULT_MAP_WIDTH; i++) {
         for (int j = 0; j < DEFAULT_MAP_HEIGHT; j++) {
             gameMap->map[i][j].typeStored = EMPTY;
@@ -101,7 +121,9 @@ int makeMap() {
             }
         }
     }
-
+    
+    generateAsteroids();
+    
     return 0;
 }
 
@@ -129,18 +151,22 @@ int createQueues() {
 
 int printMap() {
     int counter = 0;
+    int counterAsteroid = 0;
     for (int i = 0; i < MAP_WIDTH; i++) {
         for (int j = 0; j < MAP_HEIGHT; j++) {
             printf("%d", gameMap->map[i][j].typeStored);
             counter++;
+
+            if(gameMap->map[i][j].typeStored == ASTEROID)
+                counterAsteroid++;
         }
     }
     printf("\n%d", counter);
+    printf("\n%d", counterAsteroid);
 }
 
-
-int main(int argc, char *argv[ ]) {
-
+int main() {
+    srand(time(NULL));
     configurationReading();
     makeMap();
     createQueues();
