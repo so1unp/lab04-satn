@@ -20,6 +20,9 @@ int MAXIMUM_QUANTITY_MUTEXIO = 0;
 int MAXIMUM_QUANTITY_SEMAFORITA = 0;
 int MAXIMUM_QUANTITY_KERNELIO = 0;
 
+#define QUEUE_PERMISSIONS 0666
+
+
 Map *gameMap;
 int sharedMemoryFd;
 int shared_seg_size = (1 * sizeof(Map));
@@ -102,24 +105,26 @@ int makeMap() {
     return 0;
 }
 
-int createQueues(int queueSize) {
+int createQueues() {
     struct mq_attr attr;
 
-    attr.mq_flags = 0;
-    attr.mq_maxmsg = queueSize;
+    attr.mq_flags = O_NONBLOCK;
+    attr.mq_maxmsg = 10;
     attr.mq_msgsize = (1*sizeof(msg_communication_movement));
     attr.mq_curmsgs = 0;
-
-    //QUEUE PERMISSIONS
-    shipMovementCommunicationQueue = mq_open(SERVER_MOVEMENT_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDWR, 0644, &attr);
-
-    attr.mq_msgsize = (1*sizeof(msg_communication_extraction));
-    shipExtractionCommunicationQueue = mq_open(SERVER_EXTRACTION_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDWR, 0644, &attr);
-    
-    if (shipMovementCommunicationQueue == (mqd_t)-1 || shipExtractionCommunicationQueue == (mqd_t)-1) {
-        perror("Error creating message queues");
+    shipMovementCommunicationQueue = mq_open(SERVER_MOVEMENT_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDONLY, QUEUE_PERMISSIONS, &attr);
+    if (shipMovementCommunicationQueue == (mqd_t)-1) {
+        perror("Error creating movement queue");
         exit(1);
     }
+
+    attr.mq_msgsize = (1*sizeof(msg_communication_extraction));
+    shipExtractionCommunicationQueue = mq_open(SERVER_EXTRACTION_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDONLY, QUEUE_PERMISSIONS, &attr);
+    if (shipExtractionCommunicationQueue == (mqd_t)-1) {
+        perror("Error creating movement queue");
+        exit(1);
+    }
+
 }
 
 int printMap() {
@@ -133,10 +138,20 @@ int printMap() {
     printf("\n%d", counter);
 }
 
-int main() {
+
+int main(int argc, char *argv[ ]) {
 
     configurationReading();
     makeMap();
-    printMap();
-    return 0;
+    createQueues();
+    //putAsteroid();
+    //printMap();
+   
+/* 
+
+   if ((cola = mq_open (argv[1],  O_RDWR | O_NONBLOCK )) == -1) 
+   if ((cola = mq_open (argv[1],  O_RDWR )) == -1) 
+*/
+    exit(0);
+
 }
