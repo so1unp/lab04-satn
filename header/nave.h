@@ -9,16 +9,15 @@ typedef enum {
     ESTADO_GAMEOVER_COMBUSTIBLE
 } e_estado_nave;
 
-// Inventario con los materiales reales de la consigna
 typedef struct {
-    int deuterio;    // Combustible
-    int mutexio;     // Oxígeno / Usos múltiples (Común)
-    int semaforita;  // Oxígeno / Usos múltiples (Raro)
-    int kernelio;    // Oxígeno / Usos múltiples (Valioso)
+    int deuterio;    
+    int mutexio;     
+    int semaforita;  
+    int kernelio;    
 } t_inventario;
 
 typedef struct {
-    int id;
+    int id; // PID
     int pos_x;
     int pos_y;
     int oxigeno;
@@ -28,7 +27,13 @@ typedef struct {
     pthread_mutex_t mutex_nave;
 } t_nave;
 
+// Estructura para enviar comandos de movimiento por la Cola de Mensajes
+typedef struct {
+    int id_nave;
+    char comando; // 'U'=Up, 'D'=Down, 'L'=Left, 'R'=Right, 'M'=Mine
+} t_mensaje_movimiento;
+
 void inicializar_nave(t_nave* nave, int x_inicial, int y_inicial);
 void destruir_nave(t_nave* nave);
 
-#endif // NAVE_H
+#endif 
