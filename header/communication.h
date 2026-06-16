@@ -21,4 +21,11 @@ typedef struct {
     int kernelioQuantity;
 } msg_communication_extraction;
 
+typedef struct {
+    pid_t stationPid;
+    int pos_x_station;
+    int pos_y_station;
+    int fuel_station;
+} msg_communication_station_warning;
+
 #endif 

@@ -31,6 +31,8 @@ int shared_seg_size = (1 * sizeof(Map));
 mqd_t shipMovementCommunicationQueue;
 mqd_t shipExtractionCommunicationQueue;
 
+mqd_t stationWarningCommunicationQueue;
+
 int configurationReading () {
     FILE *file = fopen("config.txt", "r");
     if (file == NULL) {
@@ -147,6 +149,12 @@ int createQueues() {
         exit(1);
     }
 
+    attr.mq_msgsize = (1*sizeof(msg_communication_station_warning));
+    stationWarningCommunicationQueue = mq_open(SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDONLY, QUEUE_PERMISSIONS, &attr);
+    if (stationWarningCommunicationQueue == (mqd_t)-1) {
+        perror("Error creating warning queue");
+        exit(1);
+    }
 }
 
 int printMap() {
