@@ -30,7 +30,6 @@ int shared_seg_size = (1 * sizeof(Map));
 
 mqd_t shipMovementCommunicationQueue;
 mqd_t shipExtractionCommunicationQueue;
-
 mqd_t stationWarningCommunicationQueue;
 
 int configurationReading () {
@@ -200,3 +199,37 @@ int main() {
     exit(0);
 
 }
+
+void *banner(void *param);
+void *receiveMessage(void *param);
+void *showMessagesCounter(void *param);
+
+
+    pthread_t t_receiveMessage;
+    pthread_create(&t_receiveMessage,NULL,(void *)receiveMessage,(void *)argv[2]); //dispara receiveMessage
+    pthread_t t_showMessagesCounter;
+    pthread_create(&t_showMessagesCounter,NULL,(void *)showMessagesCounter,NULL); //dispara receiveMessage
+
+
+        pthread_cancel(t_receiveMessage);
+    pthread_cancel(t_showMessagesCounter);
+    //pthread_cancel(t_banner);
+
+
+void *receiveShipMovementMessage(void *param) {
+
+    msg_communication_movement shipMovement;
+
+    int row = 1;
+    while (1) {
+        ssize_t n = mq_receive(shipMovementCommunicationQueue, shipMovement, sizeof(buff) - 1, 0);
+        if (n == -1) {
+            perror("While receiving message from ship movement queue");
+            exit(1);
+        }
+
+        printf("")
+        
+    }
+}
+
