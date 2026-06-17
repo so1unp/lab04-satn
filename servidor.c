@@ -14,8 +14,8 @@
 
 int NUMBER_STATIONS = 0;
 int NUMBER_ASTEROIDS = 0;
-int MAP_HEIGHT = 0;
-int MAP_WIDTH = 0;
+int MAP_HEIGHT = DEFAULT_MAP_HEIGHT;
+int MAP_WIDTH = DEFAULT_MAP_WIDTH;
 int MAXIMUM_QUANTITY_DEUTERIO = 0;
 int MAXIMUM_QUANTITY_MUTEXIO = 0;
 int MAXIMUM_QUANTITY_SEMAFORITA = 0;
@@ -39,8 +39,6 @@ int configurationReading () {
         printf("Error opening configuration file\n");
         NUMBER_STATIONS = DEFAULT_NUMBER_STATIONS;
         NUMBER_ASTEROIDS = DEFAULT_NUMBER_ASTEROIDS;
-        MAP_HEIGHT = DEFAULT_MAP_HEIGHT;
-        MAP_WIDTH = DEFAULT_MAP_WIDTH;
         MAXIMUM_QUANTITY_DEUTERIO = DEFAULT_MAXIMUM_QUANTITY_DEUTERIO;
         MAXIMUM_QUANTITY_MUTEXIO = DEFAULT_MAXIMUM_QUANTITY_MUTEXIO;
         MAXIMUM_QUANTITY_SEMAFORITA = DEFAULT_MAXIMUM_QUANTITY_SEMAFORITA;
@@ -60,10 +58,6 @@ int configurationReading () {
                 NUMBER_STATIONS = atoi(value);
             } else if (strcmp(key, "NUMBER_ASTEROIDS") == 0) {
                 NUMBER_ASTEROIDS = atoi(value);
-            } else if (strcmp(key, "MAP_WIDTH") == 0) {
-                MAP_WIDTH = atoi(value);
-            } else if (strcmp(key, "MAP_HEIGHT") == 0) {
-                MAP_HEIGHT = atoi(value);
             } else if (strcmp(key, "MAXIMUM_QUANTITY_DEUTERIO") == 0) {
                 MAXIMUM_QUANTITY_DEUTERIO = atoi(value);
             } else if (strcmp(key, "MAXIMUM_QUANTITY_MUTEXIO") == 0) {
@@ -173,14 +167,31 @@ int printMap() {
     printf("\n%d", counterAsteroid);
 }
 
-int main() {
-    srand(time(NULL));
+int initializeSettings() {
     configurationReading();
     makeMap();
     createQueues();
-    //putAsteroid();
-    //printMap();
-   
+}
+
+int closeSettings() {
+    if (shm_unlink(SHARED_MEMORY_PATH) != 0) {
+        perror("In shm_unlink()");
+        exit(1);
+    }
+    mq_unlink(SERVER_MOVEMENT_COMMUNICATION_QUEUE_PATH);
+    mq_unlink(SERVER_EXTRACTION_COMMUNICATION_QUEUE_PATH);
+    mq_unlink(SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH);
+
+}
+
+int main() {
+    int endSignal = 0;  
+    initializeSettings();
+    while (endSignal != 100) {
+        scanf("%d", &endSignal);
+    } 
+
+    closeSettings();
 /* 
 
    if ((cola = mq_open (argv[1],  O_RDWR | O_NONBLOCK )) == -1) 
