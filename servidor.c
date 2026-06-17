@@ -77,11 +77,11 @@ int configurationReading () {
 
 int generateAsteroids () {
     for (int i = 0; i < NUMBER_ASTEROIDS; i++) {
-        int position_x = rand() % MAP_WIDTH;
-        int position_y = rand() % MAP_HEIGHT;
+        int position_x = (rand() % (MAP_WIDTH-2))+1;
+        int position_y = (rand() % (MAP_HEIGHT-2))+1;
         while(gameMap->map[position_x][position_y].typeStored == ASTEROID) {
-            position_x = rand() % MAP_WIDTH;
-            position_y = rand() % MAP_HEIGHT;
+            position_x = (rand() % (MAP_WIDTH-2))+1;
+            position_y = (rand() % (MAP_HEIGHT-2))+1;
         }
         
         gameMap->map[position_x][position_y].asteroid.deuterio = rand() % (MAXIMUM_QUANTITY_DEUTERIO + 1);
