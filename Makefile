@@ -1,9 +1,9 @@
 CC=gcc
 BIN=./bin
 
-CFLAGS=-g -Wall -Wextra -Wshadow -Wconversion -Wunreachable-code
+CFLAGS=-g -Wall -Wextra -Wshadow -Wconversion -Wunreachable-code -std=c99
 INCLUDES=-I"./header/."
-LDFLAGS=-lpthread -lncurses
+LDFLAGS=-lpthread -lncurses -lrt
 PROG=nave estacion servidor
 
 LIST=$(addprefix $(BIN)/, $(PROG))
