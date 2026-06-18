@@ -1,32 +1,52 @@
+/**
+ * @file estacion.h
+ * @brief Definición de estructuras y prototipos de funciones para la gestión de estaciones espaciales.
+ */
+
 #ifndef ESTACION_H
 #define ESTACION_H
 
-#include <stdlib.h>
 #include <stdbool.h>
+#include <sys/types.h>
 
+/* --- Constantes del Sistema --- */
 #define MAX_HANGAR_CAPACITY 3
-// #define MAX_FUEL_CAPACITY 100
+#define CANT_ARGUMENTS 3
 
+/* --- Estructuras de Datos --- */
+
+/**
+ * @struct station
+ * @brief Representa el estado interno, recursos y localización de una estación espacial.
+ */
 typedef struct {
-    char name[30];
-    int pos_x;
-    int pos_y;
-    // Control de Hangar y Señales
-    // Deberia tener la referencia a la cola de mensajes de las naves.
-    // avisosnaves
+    char name[30];                       /**< Nombre identificatorio de la estación */
+    int pos_x;                           /**< Coordenada en el eje X dentro del mapa espacial */
+    int pos_y;                           /**< Coordenada en el eje Y dentro del mapa espacial */
     
-    pid_t shipPids[MAX_HANGAR_CAPACITY]; // Arreglo para guardar los PID de las naves que estan en mi estacion
+    pid_t shipPids[MAX_HANGAR_CAPACITY]; /**< Listado de PIDs de las naves actualmente atracadas en el hangar */
     
-    // Combustible
-    int fuel;
+    int fuel;                            /**< Nivel actual de combustible (porcentaje o unidades) */
 
-    // Estado de la Estación
-    bool fuelWarningSent;  // true si ya notificó a las naves
-    bool isDestroyed;      // true si se quedó sin combustible y explotó
-
+    bool fuelWarningSent;                /**< Indicador de si ya se envió la alerta de bajo combustible */
+    bool isDestroyed;                    /**< Estado vital de la estación (true si colapsó o fue destruida) */
 } station;
 
-void inicializar_estacion(station* a_station, int pos_x, int pos_y);
-void dar_aviso_naves(station* a_station);
+/* --- Prototipos de Funciones --- */
 
-#endif
+/**
+ * @brief Inicializa los valores por defecto de la estructura de la estación.
+ */
+void inicializar_estacion(station *a_station, int pos_x, int pos_y);
+
+/**
+ * @brief Envía una alerta con el estado actual de la estación hacia la cola de mensajes del servidor.
+ */
+void send_message_servidor(station *a_station);
+
+/**
+ * @brief Simula el consumo progresivo de combustible de la estación a lo largo del tiempo.
+ */
+void consume_fuel(station *a_station);
+
+#endif /* ESTACION_H */
