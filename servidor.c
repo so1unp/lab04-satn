@@ -23,15 +23,40 @@ int MAXIMUM_QUANTITY_KERNELIO = 0;
 
 #define QUEUE_PERMISSIONS 0666
 
-
 Map *gameMap;
 int sharedMemoryFd;
 int shared_seg_size = (1 * sizeof(Map));
 
 mqd_t shipMovementCommunicationQueue;
 mqd_t shipExtractionCommunicationQueue;
-
 mqd_t stationWarningCommunicationQueue;
+
+pthread_t t_receiveShipMovementMessage;
+pthread_t t_receiveShipExtractionMessage;
+pthread_t t_receiveStationWarningMessage;
+
+void *receiveShipMovementMessage();
+void *receiveShipExtractionMessage();
+void *receiveStationWarningMessage();
+
+int main() {
+    int endSignal = 0;  
+    initializeSettings();
+
+    while (endSignal != 100) {
+        scanf("%d", &endSignal);
+    } 
+
+    closeSettings();
+/* 
+
+   if ((cola = mq_open (argv[1],  O_RDWR | O_NONBLOCK )) == -1) 
+   if ((cola = mq_open (argv[1],  O_RDWR )) == -1) 
+*/
+    exit(0);
+
+}
+
 
 int configurationReading () {
     FILE *file = fopen("config.txt", "r");
@@ -171,6 +196,10 @@ int initializeSettings() {
     configurationReading();
     makeMap();
     createQueues();
+
+    pthread_create(&t_receiveShipMovementMessage,NULL,(void *)receiveShipMovementMessage,NULL);
+    pthread_create(&t_receiveShipExtractionMessage,NULL,(void *)receiveShipExtractionMessage,NULL);
+    pthread_create(&t_receiveStationWarningMessage,NULL,(void *)receiveStationWarningMessage,NULL);
 }
 
 int closeSettings() {
@@ -182,21 +211,60 @@ int closeSettings() {
     mq_unlink(SERVER_EXTRACTION_COMMUNICATION_QUEUE_PATH);
     mq_unlink(SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH);
 
-}
-
-int main() {
-    int endSignal = 0;  
-    initializeSettings();
-    while (endSignal != 100) {
-        scanf("%d", &endSignal);
-    } 
-
-    closeSettings();
-/* 
-
-   if ((cola = mq_open (argv[1],  O_RDWR | O_NONBLOCK )) == -1) 
-   if ((cola = mq_open (argv[1],  O_RDWR )) == -1) 
-*/
-    exit(0);
+    pthread_cancel(t_receiveShipMovementMessage);
+    pthread_cancel(t_receiveShipExtractionMessage);
+    pthread_cancel(t_receiveStationWarningMessage);
 
 }
+
+void *receiveShipMovementMessage() {
+    msg_communication_movement shipMovement;
+    int row = 1;
+    while (1) {
+        ssize_t n = mq_receive(shipMovementCommunicationQueue, (char *)&shipMovement, sizeof(shipMovement), 0);
+        if (n == -1) {
+            perror("While receiving message from ship movement queue");
+            exit(1);
+        }
+
+        if (n == sizeof(shipMovement)) {
+            printf("received a message from the movement queue\n");
+        }
+
+    }
+}
+
+void *receiveShipExtractionMessage() {
+    msg_communication_extraction shipExtraction;
+    int row = 1;
+    while (1) {
+        ssize_t n = mq_receive(shipExtractionCommunicationQueue, (char *)&shipExtraction, sizeof(shipExtraction), 0);
+        if (n == -1) {
+            perror("While receiving message from ship extraction queue");
+            exit(1);
+        }
+
+        if (n == sizeof(shipExtraction)) {
+            printf("received a message from the extraction queue\n");
+        }
+ 
+    }
+}
+
+void *receiveStationWarningMessage() {
+    msg_communication_station_warning stationWarning;
+    int row = 1;
+    while (1) {
+        ssize_t n = mq_receive(stationWarningCommunicationQueue, (char *)&stationWarning, sizeof(stationWarning), 0);
+        if (n == -1) {
+            perror("While receiving message from ship movement queue");
+            exit(1);
+        }
+
+        if (n == sizeof(stationWarning)) {
+            printf("received a message from the station warning queue\n");
+        }
+
+    }
+}
+
