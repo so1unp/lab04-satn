@@ -7,6 +7,7 @@
 #define SERVER_EXTRACTION_COMMUNICATION_QUEUE_PATH "/extraction-communication-queue-satn"
 #define SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH "/station-warning-communication-queue-satn"
 #define SERVER_CLIENT_INITIALIZATION_QUEUE_PATH "/initialization-queue-satn"
+#define SHIP_BASE_PATH "/mq_nave_"
 
 #define DEFAULT_AMOUNT_MESSAGES_QUEUES 100
 #define DEFAULT_NUMBER_STATIONS 3
