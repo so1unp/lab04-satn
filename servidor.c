@@ -41,6 +41,8 @@ void *receiveShipMovementMessage();
 void *receiveShipExtractionMessage();
 void *receiveStationWarningMessage();
 void *receiveClientInitializationMessage();
+void *handleShipExtraction(void *arg);
+void *handleShipMovement(void *arg);
 
 int main() {
     int endSignal = 0;  
@@ -186,7 +188,7 @@ int createQueues() {
     }
 }
 
-int printMap() {
+int printMapOnStandardOutput() {
     int counter = 0;
     int counterAsteroid = 0;
     for (int i = 0; i < MAP_WIDTH; i++) {
@@ -207,10 +209,21 @@ int initializeSettings() {
     makeMap();
     createQueues();
 
-    pthread_create(&t_receiveShipMovementMessage,NULL,(void *)receiveShipMovementMessage,NULL);
-    pthread_create(&t_receiveShipExtractionMessage,NULL,(void *)receiveShipExtractionMessage,NULL);
-    pthread_create(&t_receiveStationWarningMessage,NULL,(void *)receiveStationWarningMessage,NULL);
-    pthread_create(&t_receiveClientInitializationMessage,NULL,(void *)receiveClientInitializationMessage,NULL);
+    if (pthread_create(&t_receiveShipMovementMessage,NULL,(void *)receiveShipMovementMessage,NULL) != 0) {
+        perror("Failed to create thread for receiveShipMovementMessage");
+    }
+  
+    if (pthread_create(&t_receiveClientInitializationMessage,NULL,(void *)receiveClientInitializationMessage,NULL) != 0) {
+        perror("Failed to create thread for receiveShipMovementMessage");
+    }
+  
+    if (pthread_create(&t_receiveShipExtractionMessage,NULL,(void *)receiveShipExtractionMessage,NULL) != 0) {
+        perror("Failed to create thread for receiveShipExtractionMessage");
+    }
+
+    if (pthread_create(&t_receiveStationWarningMessage,NULL,(void *)receiveStationWarningMessage,NULL) != 0) {
+        perror("Failed to create thread for receiveStationWarningMessage");
+    }
 }
 
 int closeSettings() {
@@ -230,43 +243,144 @@ int closeSettings() {
 
 }
 
+MapCell* findMapCellByClient(pid_t pid) {
+    for (int i = 0; i < DEFAULT_MAP_WIDTH; i++) {
+        for (int j = 0; j < DEFAULT_MAP_HEIGHT; j++) {
+            if (gameMap->map[i][j].ship.id == pid) {
+                return &gameMap->map[i][j];
+            }
+        }
+    }
+    return NULL;
+}
+
 void *receiveShipMovementMessage() {
-    msg_communication_movement shipMovement;
-    int row = 1;
+    msg_communication_movement message;
     while (1) {
-        ssize_t n = mq_receive(shipMovementCommunicationQueue, (char *)&shipMovement, sizeof(shipMovement), 0);
+        ssize_t n = mq_receive(shipMovementCommunicationQueue, (char *)&message, sizeof(message), 0);
         if (n == -1) {
             perror("While receiving message from ship movement queue");
             exit(1);
         }
 
-        if (n == sizeof(shipMovement)) {
+        if (n == sizeof(message)) {
             printf("received a message from the movement queue\n");
+
+            msg_communication_movement *shipMovement = malloc(sizeof(message));
+            if (shipMovement == NULL) {
+                perror("Failed to allocate memory for handleShipMovement thread");
+                exit(1);
+            }
+
+            *shipMovement = message;
+            pthread_t t_handleShipMovement;
+            if (pthread_create(&t_handleShipMovement, NULL, (void *)handleShipMovement, shipMovement) != 0) {
+                perror("Failed to create thread for handleShipMovement");
+                free(shipMovement);
+                continue;
+            }
+
+            pthread_detach(t_handleShipMovement);
+
         }
 
     }
 }
 
+void *handleShipMovement(void *arg) {
+    msg_communication_movement *shipMovement = (msg_communication_movement *)arg;
+
+    if (sem_trywait(&gameMap->map[shipMovement->shipXMovement][shipMovement->shipYMovement].mutex) == 0) {
+        MapCell *currentCell = findMapCellByClient(shipMovement->shipPid);
+        gameMap->map[shipMovement->shipXMovement][shipMovement->shipYMovement].typeStored = SHIP;
+        gameMap->map[shipMovement->shipXMovement][shipMovement->shipYMovement].ship = currentCell->ship;
+
+        currentCell->typeStored = EMPTY;
+
+        sem_post(&currentCell->mutex);
+    }
+
+    free(shipMovement);
+
+}
+
 void *receiveShipExtractionMessage() {
-    msg_communication_extraction shipExtraction;
-    int row = 1;
+    msg_communication_extraction message;
+
     while (1) {
-        ssize_t n = mq_receive(shipExtractionCommunicationQueue, (char *)&shipExtraction, sizeof(shipExtraction), 0);
+        ssize_t n = mq_receive(shipExtractionCommunicationQueue, (char *)&message, sizeof(message), 0);
         if (n == -1) {
             perror("While receiving message from ship extraction queue");
             exit(1);
         }
 
-        if (n == sizeof(shipExtraction)) {
+        if (n == sizeof(message)) {
             printf("received a message from the extraction queue\n");
+
+            msg_communication_extraction *shipExtraction = malloc(sizeof(message));
+            if (shipExtraction == NULL) {
+                perror("Failed to allocate memory for handleShipExtraction thread");
+                exit(1);
+            }
+
+            *shipExtraction = message;
+            pthread_t t_handleShipExtraction;
+            if (pthread_create(&t_handleShipExtraction, NULL, (void *)handleShipExtraction, shipExtraction) != 0) {
+                perror("Failed to create thread for handleShipExtraction");
+                free(shipExtraction);
+                continue;
+            }
+
+            pthread_detach(t_handleShipExtraction);
+
         }
  
     }
 }
 
+void *handleShipExtraction(void *arg) {
+    msg_communication_extraction *shipExtraction = (msg_communication_extraction *)arg;
+
+    if (sem_wait(&gameMap->map[shipExtraction->asteroidXPosition][shipExtraction->asteroidYPosition].asteroid.mutex) == 0) {
+        MapCell *currentCell = &gameMap->map[shipExtraction->asteroidXPosition][shipExtraction->asteroidYPosition];
+        if (currentCell->typeStored == ASTEROID && currentCell->asteroid.isActive) {
+            currentCell->asteroid.deuterio -= shipExtraction->deuterioQuantity;
+            if (currentCell->asteroid.deuterio < 0) {
+                currentCell->asteroid.deuterio = 0;
+            } 
+
+            currentCell->asteroid.kernelio -= shipExtraction->kernelioQuantity;
+            if (currentCell->asteroid.kernelio < 0) {
+                currentCell->asteroid.kernelio = 0;
+            }
+
+            currentCell->asteroid.mutexio -= shipExtraction->mutexioExtracted;
+            if (currentCell->asteroid.mutexio < 0) {
+                currentCell->asteroid.mutexio = 0;
+            } 
+
+            currentCell->asteroid.semaforita -= shipExtraction->semaforitaQuantity;
+            if (currentCell->asteroid.semaforita < 0) {
+                currentCell->asteroid.semaforita = 0;
+            } 
+
+            if (currentCell->asteroid.deuterio == 0 && 
+                currentCell->asteroid.kernelio == 0 && 
+                currentCell->asteroid.mutexio == 0 && 
+                currentCell->asteroid.semaforita == 0) {
+                
+                currentCell->asteroid.isActive = false;
+            }
+        }
+
+        sem_post(&gameMap->map[shipExtraction->asteroidXPosition][shipExtraction->asteroidYPosition].asteroid.mutex);
+    }
+    free(shipExtraction);
+
+}
+
 void *receiveStationWarningMessage() {
     msg_communication_station_warning stationWarning;
-    int row = 1;
     while (1) {
         ssize_t n = mq_receive(stationWarningCommunicationQueue, (char *)&stationWarning, sizeof(stationWarning), 0);
         if (n == -1) {
