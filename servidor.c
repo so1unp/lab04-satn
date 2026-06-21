@@ -30,14 +30,17 @@ int shared_seg_size = (1 * sizeof(Map));
 mqd_t shipMovementCommunicationQueue;
 mqd_t shipExtractionCommunicationQueue;
 mqd_t stationWarningCommunicationQueue;
+mqd_t clientInitializationCommunicationQueue;
 
 pthread_t t_receiveShipMovementMessage;
 pthread_t t_receiveShipExtractionMessage;
 pthread_t t_receiveStationWarningMessage;
+pthread_t t_receiveClientInitializationMessage;
 
 void *receiveShipMovementMessage();
 void *receiveShipExtractionMessage();
 void *receiveStationWarningMessage();
+void *receiveClientInitializationMessage();
 void *handleShipExtraction(void *arg);
 void *handleShipMovement(void *arg);
 
@@ -176,6 +179,13 @@ int createQueues() {
         perror("Error creating warning queue");
         exit(1);
     }
+
+    attr.mq_msgsize = (1*sizeof(msg_communication_initialization));
+    clientInitializationCommunicationQueue = mq_open(SERVER_CLIENT_INITIALIZATION_QUEUE_PATH, O_CREAT | O_RDONLY, QUEUE_PERMISSIONS, &attr);
+    if (clientInitializationCommunicationQueue == (mqd_t)-1) {
+        perror("Error creating warning queue");
+        exit(1);
+    }
 }
 
 int printMapOnStandardOutput() {
@@ -202,7 +212,11 @@ int initializeSettings() {
     if (pthread_create(&t_receiveShipMovementMessage,NULL,(void *)receiveShipMovementMessage,NULL) != 0) {
         perror("Failed to create thread for receiveShipMovementMessage");
     }
-
+  
+    if (pthread_create(&t_receiveClientInitializationMessage,NULL,(void *)receiveClientInitializationMessage,NULL) != 0) {
+        perror("Failed to create thread for receiveShipMovementMessage");
+    }
+  
     if (pthread_create(&t_receiveShipExtractionMessage,NULL,(void *)receiveShipExtractionMessage,NULL) != 0) {
         perror("Failed to create thread for receiveShipExtractionMessage");
     }
@@ -220,10 +234,12 @@ int closeSettings() {
     mq_unlink(SERVER_MOVEMENT_COMMUNICATION_QUEUE_PATH);
     mq_unlink(SERVER_EXTRACTION_COMMUNICATION_QUEUE_PATH);
     mq_unlink(SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH);
+    mq_unlink(SERVER_CLIENT_INITIALIZATION_QUEUE_PATH);
 
     pthread_cancel(t_receiveShipMovementMessage);
     pthread_cancel(t_receiveShipExtractionMessage);
     pthread_cancel(t_receiveStationWarningMessage);
+    pthread_cancel(t_receiveClientInitializationMessage);
 
 }
 
@@ -379,3 +395,18 @@ void *receiveStationWarningMessage() {
     }
 }
 
+void *receiveClientInitializationMessage() {
+    msg_communication_initialization clientInitialization;
+    while (1) {
+        ssize_t n = mq_receive(clientInitializationCommunicationQueue, (char *)&clientInitialization, sizeof(clientInitialization), 0);
+        if (n == -1) {
+            perror("While receiving message from client initialization queue");
+            exit(1);
+        }
+
+        if (n == sizeof(clientInitialization)) {
+            printf("received a message from the client initialization queue\n");
+        }
+
+    }
+}
