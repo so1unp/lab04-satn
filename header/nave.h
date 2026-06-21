@@ -24,16 +24,9 @@ typedef struct {
     int combustible;
     e_estado_nave estado;
     t_inventario inventario;
-    pthread_mutex_t mutex_nave;
 } t_nave;
 
-// Estructura para enviar comandos de movimiento por la Cola de Mensajes
-typedef struct {
-    int id_nave;
-    char comando; // 'U'=Up, 'D'=Down, 'L'=Left, 'R'=Right, 'M'=Mine
-} t_mensaje_movimiento;
-
-void inicializar_nave(t_nave* nave, int x_inicial, int y_inicial);
+void inicializar_nave(t_nave* nave);
 void destruir_nave(t_nave* nave);
 
 #endif 

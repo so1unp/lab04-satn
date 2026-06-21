@@ -14,8 +14,6 @@
 
 int NUMBER_STATIONS = 0;
 int NUMBER_ASTEROIDS = 0;
-int MAP_HEIGHT = DEFAULT_MAP_HEIGHT;
-int MAP_WIDTH = DEFAULT_MAP_WIDTH;
 int MAXIMUM_QUANTITY_DEUTERIO = 0;
 int MAXIMUM_QUANTITY_MUTEXIO = 0;
 int MAXIMUM_QUANTITY_SEMAFORITA = 0;
@@ -55,6 +53,10 @@ int main() {
 
     while (endSignal != 100) {
         scanf("%d", &endSignal);
+        if (endSignal == 50) {
+            printMapOnStandardOutput();
+            endSignal = 0;
+        }
     } 
 
     closeSettings();
@@ -112,19 +114,18 @@ int configurationReading () {
 
 int generateAsteroids () {
     for (int i = 0; i < NUMBER_ASTEROIDS; i++) {
-        int position_x = (rand() % (MAP_WIDTH-2))+1;
-        int position_y = (rand() % (MAP_HEIGHT-2))+1;
-        while(gameMap->map[position_x][position_y].typeStored == ASTEROID) {
-            position_x = (rand() % (MAP_WIDTH-2))+1;
-            position_y = (rand() % (MAP_HEIGHT-2))+1;
+        int position_y = (rand() % (DEFAULT_MAP_HEIGHT - 2)) + 1;
+        int position_x = (rand() % (DEFAULT_MAP_WIDTH - 2)) + 1;
+        while(gameMap->map[position_y][position_x].typeStored == ASTEROID) {
+            position_y = (rand() % (DEFAULT_MAP_HEIGHT - 2)) + 1;
+            position_x = (rand() % (DEFAULT_MAP_WIDTH - 2)) + 1;
         }
-        
-        gameMap->map[position_x][position_y].asteroid.deuterio = rand() % (MAXIMUM_QUANTITY_DEUTERIO + 1);
-        gameMap->map[position_x][position_y].asteroid.kernelio = rand() % (MAXIMUM_QUANTITY_KERNELIO + 1);
-        gameMap->map[position_x][position_y].asteroid.mutexio = rand() % (MAXIMUM_QUANTITY_MUTEXIO + 1);
-        gameMap->map[position_x][position_y].asteroid.semaforita = rand() % (MAXIMUM_QUANTITY_SEMAFORITA + 1);
-        gameMap->map[position_x][position_y].typeStored = ASTEROID;
-        sem_init(&(gameMap->map[position_x][position_y].asteroid.mutex), 0, 1);
+        gameMap->map[position_y][position_x].asteroid.deuterio = rand() % (MAXIMUM_QUANTITY_DEUTERIO + 1);
+        gameMap->map[position_y][position_x].asteroid.kernelio = rand() % (MAXIMUM_QUANTITY_KERNELIO + 1);
+        gameMap->map[position_y][position_x].asteroid.mutexio = rand() % (MAXIMUM_QUANTITY_MUTEXIO + 1);
+        gameMap->map[position_y][position_x].asteroid.semaforita = rand() % (MAXIMUM_QUANTITY_SEMAFORITA + 1);
+        gameMap->map[position_y][position_x].typeStored = ASTEROID;
+        sem_init(&(gameMap->map[position_y][position_x].asteroid.mutex), 0, 1);
     }
 }
 
@@ -143,8 +144,8 @@ int makeMap() {
         exit(1);
     }
     
-    for (int i = 0; i < DEFAULT_MAP_WIDTH; i++) {
-        for (int j = 0; j < DEFAULT_MAP_HEIGHT; j++) {
+    for (int i = 0; i < DEFAULT_MAP_HEIGHT; i++) {
+        for (int j = 0; j < DEFAULT_MAP_WIDTH; j++) {
             gameMap->map[i][j].typeStored = EMPTY;
             if (sem_init(&(gameMap->map[i][j].mutex), 0, 1) != 0) {
                 perror("Failed to initialize process-shared semaphore");
@@ -194,19 +195,33 @@ int createQueues() {
 }
 
 int printMapOnStandardOutput() {
-    int counter = 0;
-    int counterAsteroid = 0;
-    for (int i = 0; i < MAP_WIDTH; i++) {
-        for (int j = 0; j < MAP_HEIGHT; j++) {
+    int totalCounter = 0;
+    int asteroidCounter = 0;
+    int shipsCounter = 0;
+    int stationCounter = 0;
+    for (int i = 0; i < DEFAULT_MAP_HEIGHT; i++) {
+        for (int j = 0; j < DEFAULT_MAP_WIDTH; j++) {
             printf("%d", gameMap->map[i][j].typeStored);
-            counter++;
+            totalCounter++;
 
-            if(gameMap->map[i][j].typeStored == ASTEROID)
-                counterAsteroid++;
+            if(gameMap->map[i][j].typeStored == ASTEROID) {
+                asteroidCounter++;
+            }
+
+            if(gameMap->map[i][j].typeStored == SHIP) {
+                shipsCounter++;
+            }
+
+            if(gameMap->map[i][j].typeStored == STATION) {
+                stationCounter++;
+            }
+
         }
     }
-    printf("\n%d", counter);
-    printf("\n%d", counterAsteroid);
+    printf("\nTotal cells: %d\n", totalCounter);
+    printf("\nTotal asteroids: %d\n", asteroidCounter);
+    printf("\nTotal ships: %d\n", shipsCounter);
+    printf("\nTotal stations: %d\n", stationCounter);
 }
 
 int initializeSettings() {
@@ -249,8 +264,8 @@ int closeSettings() {
 }
 
 MapCell* findMapCellByClient(pid_t pid) {
-    for (int i = 0; i < DEFAULT_MAP_WIDTH; i++) {
-        for (int j = 0; j < DEFAULT_MAP_HEIGHT; j++) {
+    for (int i = 0; i < DEFAULT_MAP_HEIGHT; i++) {
+        for (int j = 0; j < DEFAULT_MAP_WIDTH; j++) {
             if (gameMap->map[i][j].ship.id == pid) {
                 return &gameMap->map[i][j];
             }
@@ -295,10 +310,13 @@ void *receiveShipMovementMessage() {
 void *handleShipMovement(void *arg) {
     msg_communication_movement *shipMovement = (msg_communication_movement *)arg;
 
-    if (sem_trywait(&gameMap->map[shipMovement->shipXMovement][shipMovement->shipYMovement].mutex) == 0) {
+    if (sem_trywait(&gameMap->map[shipMovement->shipYMovement][shipMovement->shipXMovement].mutex) == 0) {
         MapCell *currentCell = findMapCellByClient(shipMovement->shipPid);
-        gameMap->map[shipMovement->shipXMovement][shipMovement->shipYMovement].typeStored = SHIP;
-        gameMap->map[shipMovement->shipXMovement][shipMovement->shipYMovement].ship = currentCell->ship;
+        gameMap->map[shipMovement->shipYMovement][shipMovement->shipXMovement].typeStored = SHIP;
+        gameMap->map[shipMovement->shipYMovement][shipMovement->shipXMovement].ship = currentCell->ship;
+
+        gameMap->map[shipMovement->shipYMovement][shipMovement->shipXMovement].ship.pos_x = shipMovement->shipXMovement;
+        gameMap->map[shipMovement->shipYMovement][shipMovement->shipXMovement].ship.pos_y = shipMovement->shipYMovement;
 
         currentCell->typeStored = EMPTY;
 
@@ -420,8 +438,8 @@ void *handleStationWarning(void *arg) {
     msg_communication_station_warning *stationWarning = (msg_communication_station_warning *)arg;
     char shipQueuePath[128];
 
-    for (int i = 0; i < MAP_WIDTH; i++) {
-        for (int j = 0; j < MAP_HEIGHT; j++) {
+    for (int i = 0; i < DEFAULT_MAP_HEIGHT; i++) {
+        for (int j = 0; j < DEFAULT_MAP_WIDTH; j++) {
             
             if (gameMap->map[i][j].typeStored == SHIP && gameMap->map[i][j].ship.estado == ESTADO_VIVO) {
                 snprintf(shipQueuePath, sizeof(shipQueuePath), "%s%d", SHIP_BASE_PATH, gameMap->map[i][j].ship.id);
@@ -482,15 +500,15 @@ void *handleClientInitialization(void *arg) {
     bool wasPlaced = false;
 
     while (!wasPlaced) {
-        chosenX = rand() % DEFAULT_MAP_WIDTH;
-        chosenY = rand() % DEFAULT_MAP_HEIGHT;
+        chosenX = rand() % DEFAULT_MAP_HEIGHT;
+        chosenY = rand() % DEFAULT_MAP_WIDTH;
 
-        if (sem_trywait(&gameMap->map[chosenX][chosenY].mutex) == 0) {
+        if (sem_trywait(&gameMap->map[chosenY][chosenX].mutex) == 0) {
             if (clientInitialization->typeStored == SHIP) {
-                gameMap->map[chosenX][chosenY].typeStored = SHIP;
-                gameMap->map[chosenX][chosenY].ship = clientInitialization->ship;
+                gameMap->map[chosenY][chosenX].typeStored = SHIP;
+                gameMap->map[chosenY][chosenX].ship = clientInitialization->ship;
             } else if (clientInitialization->typeStored == STATION) {
-                gameMap->map[chosenX][chosenY].typeStored = STATION;
+                gameMap->map[chosenY][chosenX].typeStored = STATION;
 //                gameMap->map[chosenX][chosenY].station = clientInitialization->station;
             }
 

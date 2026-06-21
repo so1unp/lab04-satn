@@ -8,6 +8,7 @@
 #include <mqueue.h>
 #include "nave.h"
 #include "map.h"
+#include "communication.h"
 
 #define TECLA_SALIR 'q'
 #define TECLA_MINAR 'm'
@@ -15,6 +16,8 @@
 // Variables globales para IPC
 Map *gameMap = NULL;
 int sharedMemoryFd = -1;
+mqd_t cola_aviso_estacion = -1;
+mqd_t cola_inicializacion = -1;
 mqd_t cola_movimiento = -1;
 char mq_name[50];
 
@@ -25,14 +28,15 @@ volatile int juego_ejecutando = 1;
 // Instancia local para el control de recursos propios (Soporte Vital)
 t_nave mi_nave;
 
+// Mutex usado para concurrencia local
+pthread_mutex_t mutex_nave;
+
 // --- FUNCIONES DEL MODELO ---
 
-void inicializar_nave(t_nave* nave, int x_inicial, int y_inicial) {
+void inicializar_nave(t_nave* nave) {
     if (nave == NULL) return;
 
     nave->id = getpid(); // Tu ID oficial es el PID del proceso
-    nave->pos_x = x_inicial;
-    nave->pos_y = y_inicial;
     nave->oxigeno = 100;       
     nave->combustible = 100;   
     nave->estado = ESTADO_VIVO;
@@ -42,14 +46,15 @@ void inicializar_nave(t_nave* nave, int x_inicial, int y_inicial) {
     nave->inventario.semaforita = 0;
     nave->inventario.kernelio = 0;
 
-    if (pthread_mutex_init(&(nave->mutex_nave), NULL) != 0) {
+    if (pthread_mutex_init(&(mutex_nave), NULL) != 0) {
         perror("Error al inicializar el mutex de la nave");
     }
+
 }
 
 void destruir_nave(t_nave* nave) {
     if (nave == NULL) return;
-    pthread_mutex_destroy(&(nave->mutex_nave));
+    pthread_mutex_destroy(&(mutex_nave));
 }
 
 // --- CONEXION A LOS RECURSOS IPC DEL SERVIDOR ---
@@ -68,18 +73,30 @@ void conectar_ipc() {
         exit(1);
     }
 
+    cola_inicializacion = mq_open(SERVER_CLIENT_INITIALIZATION_QUEUE_PATH, O_WRONLY);
+    if (cola_inicializacion == (mqd_t)-1) {
+        perror("Error abriendo cola de inicializacion");
+        exit(1);
+    }
+
+    cola_movimiento = mq_open(SERVER_MOVEMENT_COMMUNICATION_QUEUE_PATH, O_WRONLY);
+    if (cola_movimiento == (mqd_t)-1) {
+        perror("Error abriendo cola de movimiento");
+        exit(1);
+    }
+
     // 2. Creación de la Cola de Mensajes única basada en el PID
     snprintf(mq_name, sizeof(mq_name), "/mq_nave_%d", getpid());
     
     struct mq_attr attr;
     attr.mq_flags = 0;
     attr.mq_maxmsg = 10;
-    attr.mq_msgsize = sizeof(t_mensaje_movimiento);
+    attr.mq_msgsize = sizeof(msg_communication_station_warning);
     attr.mq_curmsgs = 0;
 
-    // La nave crea la cola para que el servidor lea de ella
-    cola_movimiento = mq_open(mq_name, O_CREAT | O_WRONLY, 0660, &attr);
-    if (cola_movimiento == (mqd_t)-1) {
+    // La nave crea la cola para que el servidor le mande avisos
+    cola_aviso_estacion = mq_open(mq_name, O_CREAT | O_RDONLY, 0660, &attr);
+    if (cola_aviso_estacion == (mqd_t)-1) {
         perror("Error al crear la cola de mensajes de la nave");
         exit(1);
     }
@@ -92,11 +109,20 @@ void desconectar_ipc() {
     if (sharedMemoryFd >= 0) {
         close(sharedMemoryFd);
     }
-    if (cola_movimiento != (mqd_t)-1) {
-        mq_close(cola_movimiento);
+    
+    if (cola_aviso_estacion != (mqd_t)-1) {
+        mq_close(cola_aviso_estacion);
         mq_unlink(mq_name);
     }
+    if (cola_inicializacion != (mqd_t)-1) {
+        mq_close(cola_inicializacion);
+    }
+
+    if (cola_movimiento != (mqd_t)-1) {
+        mq_close(cola_movimiento);
+    }
 }
+
 
 // --- FUNCIONES VISUALES (Ncurses basados en Memoria Compartida) ---
 
@@ -128,23 +154,18 @@ void renderizar_universo_shm(t_nave* nave) {
     for (int y = 0; y < DEFAULT_MAP_HEIGHT; y++) {
         for (int x = 0; x < DEFAULT_MAP_WIDTH; x++) {
             
-            // Si la celda de la SHM contiene nuestra nave
-            if (gameMap->map[x][y].typeStored == SHIP && gameMap->map[x][y].ship.id == nave->id) {
+            if (gameMap->map[y][x].typeStored == SHIP && gameMap->map[y][x].ship.id == nave->id) {
                 mvaddch(mapa_start_y + y, mapa_start_x + x, (chtype)caracter_nave);
             } 
-            // Si es la nave de otro jugador
-            else if (gameMap->map[x][y].typeStored == SHIP) {
+            else if (gameMap->map[y][x].typeStored == SHIP) {
                 mvaddch(mapa_start_y + y, mapa_start_x + x, (chtype)'S');
             }
-            // Si es un asteroide colocado por el Servidor
-            else if (gameMap->map[x][y].typeStored == ASTEROID) {
+            else if (gameMap->map[y][x].typeStored == ASTEROID) {
                 mvaddch(mapa_start_y + y, mapa_start_x + x, (chtype)'A');
             }
-            // Si es una estación
-            else if (gameMap->map[x][y].typeStored == STATION) {
+            else if (gameMap->map[y][x].typeStored == STATION) {
                 mvaddch(mapa_start_y + y, mapa_start_x + x, (chtype)'E');
             }
-            // Espacio vacío o límites del mapa locales
             else {
                 if (y == 0 || y == DEFAULT_MAP_HEIGHT - 1 || x == 0 || x == DEFAULT_MAP_WIDTH - 1) {
                     mvaddch(mapa_start_y + y, mapa_start_x + x, (chtype)'#');
@@ -156,7 +177,7 @@ void renderizar_universo_shm(t_nave* nave) {
     }
 
     // 2. RENDERIZAR PANEL DE CONTROL LOCAL
-    pthread_mutex_lock(&nave->mutex_nave);
+    pthread_mutex_lock(&mutex_nave);
     mvprintw(panel_start_y,     panel_start_x, " ================================================== ");
     mvprintw(panel_start_y + 1, panel_start_x, "   PID NAVE: %d | OXIGENO: %3d%% | NAFTA: %3d%%", 
              nave->id, nave->oxigeno, nave->combustible);
@@ -172,7 +193,7 @@ void renderizar_universo_shm(t_nave* nave) {
              nave->inventario.deuterio, nave->inventario.mutexio, 
              nave->inventario.semaforita, nave->inventario.kernelio);
     mvprintw(panel_start_y + 5, panel_start_x, " ================================================== ");
-    pthread_mutex_unlock(&nave->mutex_nave);
+    pthread_mutex_unlock(&mutex_nave);
     
     refresh();
 }
@@ -192,7 +213,7 @@ void* hilo_soporte_vital(void* arg) {
     t_nave* nave_compartida = (t_nave*)arg;
     while (juego_ejecutando) {
         sleep(1); 
-        pthread_mutex_lock(&nave_compartida->mutex_nave);
+        pthread_mutex_lock(&mutex_nave);
         if (nave_compartida->estado == ESTADO_VIVO) {
             nave_compartida->oxigeno -= 1;
             if (nave_compartida->oxigeno <= 0) {
@@ -200,7 +221,7 @@ void* hilo_soporte_vital(void* arg) {
                 nave_compartida->estado = ESTADO_GAMEOVER_OXIGENO;
             }
         }
-        pthread_mutex_unlock(&nave_compartida->mutex_nave);
+        pthread_mutex_unlock(&mutex_nave);
     }
     return NULL;
 }
@@ -208,13 +229,41 @@ void* hilo_soporte_vital(void* arg) {
 // --- ENVIAR COMANDO AL SERVIDOR ---
 
 void enviar_comando(char cmd) {
-    t_mensaje_movimiento msg;
-    msg.id_nave = getpid();
-    msg.comando = cmd;
+    msg_communication_movement msg;
+    msg.shipPid = getpid();
 
-    // Se envía el mensaje de forma no bloqueante a la cola del servidor
+    pthread_mutex_lock(&mutex_nave);
+    int targetX = mi_nave.pos_x;
+    int targetY = mi_nave.pos_y;
+
+    switch (cmd) {
+        case 'U': targetY -= 1; break; // Up
+        case 'D': targetY += 1; break; // Down
+        case 'L': targetX -= 1; break; // Left
+        case 'R': targetX += 1; break; // Right
+        case 'M': 
+            // Handle mining message setup here if needed
+            //pthread_mutex_unlock(&mi_nave.mutex_nave);
+            return;
+    }
+
+    // Boundary containment safety check before bothering the server
+    if (targetX >= 0 && targetX < DEFAULT_MAP_WIDTH && targetY >= 0 && targetY < DEFAULT_MAP_HEIGHT) {
+        msg.shipXMovement = targetX;
+        msg.shipYMovement = targetY;
+        
+        // Optimistically update local state or let server-sync handling update it
+        mi_nave.pos_x = targetX;
+        mi_nave.pos_y = targetY;
+    } else {
+        pthread_mutex_unlock(&mutex_nave);
+        return;
+    }
+    pthread_mutex_unlock(&mutex_nave);
+
+    // Send the structured data block to the server
     if (mq_send(cola_movimiento, (const char*)&msg, sizeof(msg), 0) == -1) {
-        // Si falla porque el servidor no lee, evitamos romper el flujo gráfico
+        perror("Failed to send movement packet");
     }
 }
 
@@ -227,8 +276,33 @@ int main() {
     // Conexión obligatoria al entorno IPC antes de inicializar ncurses
     conectar_ipc();
 
-    // Seteamos la nave local con su PID y posición tentativa
-    inicializar_nave(&mi_nave, 5, 5);
+    // Seteamos la nave local con su PID
+    inicializar_nave(&mi_nave);
+
+    msg_communication_initialization init_msg;
+    init_msg.typeStored = SHIP;
+    init_msg.ship = mi_nave; 
+    if (mq_send(cola_inicializacion, (const char*)&init_msg, sizeof(init_msg), 0) == -1) {
+        perror("Failed to send initialization message to server");
+        exit(1);
+    }
+
+    sleep(1);
+
+    int found = 0;
+    for (int y = 0; y < DEFAULT_MAP_HEIGHT && !found; y++) {
+        for (int x = 0; x < DEFAULT_MAP_WIDTH; x++) {
+            if (gameMap->map[y][x].typeStored == SHIP && gameMap->map[y][x].ship.id == mi_nave.id) {
+                pthread_mutex_lock(&mutex_nave);
+                mi_nave.pos_x = x;
+                mi_nave.pos_y = y;
+                pthread_mutex_unlock(&mutex_nave);
+                found = 1;
+                break;
+            }
+        }
+    }
+
     inicializar_visuales();
 
     pthread_create(&thread_visual, NULL, hilo_renderizador, (void*)&mi_nave);
@@ -237,38 +311,34 @@ int main() {
     // Bucle de Input: Lee teclas y las despacha por la Cola de Mensajes
     while ((ch = getch()) != TECLA_SALIR) {
         
-        pthread_mutex_lock(&mi_nave.mutex_nave);
-        if (mi_nave.estado == ESTADO_VIVO && mi_nave.combustible > 0) {
-            
+        // 1. Check state safely and modify fuel inside an isolated block
+        pthread_mutex_lock(&mutex_nave);
+        int puede_moverse = (mi_nave.estado == ESTADO_VIVO && mi_nave.combustible > 0);
+        
+        if (puede_moverse) {
             switch (ch) {
-                case KEY_UP:
-                    caracter_nave = '^';
-                    mi_nave.combustible -= 2;
-                    enviar_comando('U');
-                    break;
-                case KEY_DOWN:
-                    caracter_nave = 'v';
-                    mi_nave.combustible -= 2;
-                    enviar_comando('D');
-                    break;
-                case KEY_LEFT:
-                    caracter_nave = '<';
-                    mi_nave.combustible -= 2;
-                    enviar_comando('L');
-                    break;
-                case KEY_RIGHT:
-                    caracter_nave = '>';
-                    mi_nave.combustible -= 2;
-                    enviar_comando('R');
-                    break;
+                case KEY_UP:    caracter_nave = '^'; mi_nave.combustible -= 2; break;
+                case KEY_DOWN:  caracter_nave = 'v'; mi_nave.combustible -= 2; break;
+                case KEY_LEFT:  caracter_nave = '<'; mi_nave.combustible -= 2; break;
+                case KEY_RIGHT: caracter_nave = '>'; mi_nave.combustible -= 2; break;
                 case TECLA_MINAR:
-                case 'M': 
-                    mi_nave.combustible -= 5;
-                    enviar_comando('M');
-                    break;
+                case 'M':                            mi_nave.combustible -= 5; break;
+                default:        puede_moverse = 0;                             break;
             }
         }
-        pthread_mutex_unlock(&mi_nave.mutex_nave);
+        pthread_mutex_unlock(&mutex_nave); // 2. ALWAYS UNLOCK HERE FIRST
+
+        // 3. Now it is completely safe to call without deadlocking
+        if (puede_moverse) {
+            switch (ch) {
+                case KEY_UP:    enviar_comando('U'); break;
+                case KEY_DOWN:  enviar_comando('D'); break;
+                case KEY_LEFT:  enviar_comando('L'); break;
+                case KEY_RIGHT: enviar_comando('R'); break;
+                case TECLA_MINAR:
+                case 'M':       enviar_comando('M'); break;
+            }
+        }
     }
 
     // Apagado y limpieza total de recursos del Sistema Operativo
