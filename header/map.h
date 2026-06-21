@@ -17,7 +17,7 @@ typedef struct {
 
 
 typedef struct {
-    MapCell map[DEFAULT_MAP_WIDTH][DEFAULT_MAP_HEIGHT];
+    MapCell map[DEFAULT_MAP_HEIGHT][DEFAULT_MAP_WIDTH];
 } Map;
 
 

@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <defaultconfig.h>
 #include <semaphore.h> 
+#include <nave.h>
 
 typedef struct {
     pid_t shipPid;
