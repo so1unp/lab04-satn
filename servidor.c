@@ -43,6 +43,7 @@ void *receiveStationWarningMessage();
 void *receiveClientInitializationMessage();
 void *handleShipExtraction(void *arg);
 void *handleShipMovement(void *arg);
+void *handleStationWarning(void *arg);
 
 int main() {
     int endSignal = 0;  
@@ -119,7 +120,7 @@ int generateAsteroids () {
         gameMap->map[position_x][position_y].asteroid.mutexio = rand() % (MAXIMUM_QUANTITY_MUTEXIO + 1);
         gameMap->map[position_x][position_y].asteroid.semaforita = rand() % (MAXIMUM_QUANTITY_SEMAFORITA + 1);
         gameMap->map[position_x][position_y].typeStored = ASTEROID;
-        
+        sem_init(&(gameMap->map[position_x][position_y].asteroid.mutex), 0, 1);
     }
 }
 
@@ -380,19 +381,61 @@ void *handleShipExtraction(void *arg) {
 }
 
 void *receiveStationWarningMessage() {
-    msg_communication_station_warning stationWarning;
+    msg_communication_station_warning message;
     while (1) {
-        ssize_t n = mq_receive(stationWarningCommunicationQueue, (char *)&stationWarning, sizeof(stationWarning), 0);
+        ssize_t n = mq_receive(stationWarningCommunicationQueue, (char *)&message, sizeof(message), 0);
         if (n == -1) {
-            perror("While receiving message from ship movement queue");
+            perror("While receiving message from station warning queue");
             exit(1);
         }
 
-        if (n == sizeof(stationWarning)) {
+        if (n == sizeof(message)) {
             printf("received a message from the station warning queue\n");
+
+            msg_communication_station_warning *stationWarning = malloc(sizeof(message));
+            if (stationWarning == NULL) {
+                perror("Failed to allocate memory for handleStationWarning thread");
+                exit(1);
+            }
+
+            *stationWarning = message;
+            pthread_t t_handleStationWarning;
+            if (pthread_create(&t_handleStationWarning, NULL, (void *)handleStationWarning, stationWarning) != 0) {
+                perror("Failed to create thread for handleStationWarning");
+                free(stationWarning);
+                continue;
+            }
+
+            pthread_detach(t_handleStationWarning);
         }
 
     }
+}
+
+void *handleStationWarning(void *arg) {
+    msg_communication_station_warning *stationWarning = (msg_communication_station_warning *)arg;
+    char shipQueuePath[128];
+
+    for (int i = 0; i < MAP_WIDTH; i++) {
+        for (int j = 0; j < MAP_HEIGHT; j++) {
+            
+            if (gameMap->map[i][j].typeStored == SHIP && gameMap->map[i][j].ship.estado == ESTADO_VIVO) {
+                snprintf(shipQueuePath, sizeof(shipQueuePath), "%s%d", SHIP_BASE_PATH, gameMap->map[i][j].ship.id);
+
+                mqd_t shipQueueFileDescriptor= mq_open(shipQueuePath, O_WRONLY);
+                
+                if (shipQueueFileDescriptor != (mqd_t)-1) {
+                    if (mq_send(shipQueueFileDescriptor, (const char *)stationWarning, sizeof(msg_communication_station_warning), 0) == -1) {
+                        perror("Failed to send an alert message to ship queue");
+                    }
+                    mq_close(shipQueueFileDescriptor);
+                }
+            }
+
+        }
+    }
+
+    free(stationWarning);
 }
 
 void *receiveClientInitializationMessage() {
