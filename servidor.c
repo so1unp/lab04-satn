@@ -503,12 +503,12 @@ void *handleClientInitialization(void *arg) {
         chosenX = rand() % DEFAULT_MAP_HEIGHT;
         chosenY = rand() % DEFAULT_MAP_WIDTH;
 
-        if (sem_trywait(&gameMap->map[chosenX][chosenY].mutex) == 0) {
+        if (sem_trywait(&gameMap->map[chosenY][chosenX].mutex) == 0) {
             if (clientInitialization->typeStored == SHIP) {
-                gameMap->map[chosenX][chosenY].typeStored = SHIP;
-                gameMap->map[chosenX][chosenY].ship = clientInitialization->ship;
+                gameMap->map[chosenY][chosenX].typeStored = SHIP;
+                gameMap->map[chosenY][chosenX].ship = clientInitialization->ship;
             } else if (clientInitialization->typeStored == STATION) {
-                gameMap->map[chosenX][chosenY].typeStored = STATION;
+                gameMap->map[chosenY][chosenX].typeStored = STATION;
 //                gameMap->map[chosenX][chosenY].station = clientInitialization->station;
             }
 

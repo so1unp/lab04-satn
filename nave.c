@@ -287,6 +287,22 @@ int main() {
         exit(1);
     }
 
+    sleep(1);
+
+    int found = 0;
+    for (int y = 0; y < DEFAULT_MAP_HEIGHT && !found; y++) {
+        for (int x = 0; x < DEFAULT_MAP_WIDTH; x++) {
+            if (gameMap->map[y][x].typeStored == SHIP && gameMap->map[y][x].ship.id == mi_nave.id) {
+                pthread_mutex_lock(&mutex_nave);
+                mi_nave.pos_x = x;
+                mi_nave.pos_y = y;
+                pthread_mutex_unlock(&mutex_nave);
+                found = 1;
+                break;
+            }
+        }
+    }
+
     inicializar_visuales();
 
     pthread_create(&thread_visual, NULL, hilo_renderizador, (void*)&mi_nave);
@@ -295,38 +311,34 @@ int main() {
     // Bucle de Input: Lee teclas y las despacha por la Cola de Mensajes
     while ((ch = getch()) != TECLA_SALIR) {
         
+        // 1. Check state safely and modify fuel inside an isolated block
         pthread_mutex_lock(&mutex_nave);
-        if (mi_nave.estado == ESTADO_VIVO && mi_nave.combustible > 0) {
-            
+        int puede_moverse = (mi_nave.estado == ESTADO_VIVO && mi_nave.combustible > 0);
+        
+        if (puede_moverse) {
             switch (ch) {
-                case KEY_UP:
-                    caracter_nave = '^';
-                    mi_nave.combustible -= 2;
-                    enviar_comando('U');
-                    break;
-                case KEY_DOWN:
-                    caracter_nave = 'v';
-                    mi_nave.combustible -= 2;
-                    enviar_comando('D');
-                    break;
-                case KEY_LEFT:
-                    caracter_nave = '<';
-                    mi_nave.combustible -= 2;
-                    enviar_comando('L');
-                    break;
-                case KEY_RIGHT:
-                    caracter_nave = '>';
-                    mi_nave.combustible -= 2;
-                    enviar_comando('R');
-                    break;
+                case KEY_UP:    caracter_nave = '^'; mi_nave.combustible -= 2; break;
+                case KEY_DOWN:  caracter_nave = 'v'; mi_nave.combustible -= 2; break;
+                case KEY_LEFT:  caracter_nave = '<'; mi_nave.combustible -= 2; break;
+                case KEY_RIGHT: caracter_nave = '>'; mi_nave.combustible -= 2; break;
                 case TECLA_MINAR:
-                case 'M': 
-                    mi_nave.combustible -= 5;
-                    enviar_comando('M');
-                    break;
+                case 'M':                            mi_nave.combustible -= 5; break;
+                default:        puede_moverse = 0;                             break;
             }
         }
-        pthread_mutex_unlock(&mutex_nave);
+        pthread_mutex_unlock(&mutex_nave); // 2. ALWAYS UNLOCK HERE FIRST
+
+        // 3. Now it is completely safe to call without deadlocking
+        if (puede_moverse) {
+            switch (ch) {
+                case KEY_UP:    enviar_comando('U'); break;
+                case KEY_DOWN:  enviar_comando('D'); break;
+                case KEY_LEFT:  enviar_comando('L'); break;
+                case KEY_RIGHT: enviar_comando('R'); break;
+                case TECLA_MINAR:
+                case 'M':       enviar_comando('M'); break;
+            }
+        }
     }
 
     // Apagado y limpieza total de recursos del Sistema Operativo
