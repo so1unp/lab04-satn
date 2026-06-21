@@ -8,6 +8,8 @@
 
 typedef struct {
     pid_t shipPid;
+    int shipCurrentX;
+    int shipCurrentY;
     int shipXMovement;
     int shipYMovement;
 } msg_communication_movement;
