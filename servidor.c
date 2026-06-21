@@ -44,8 +44,12 @@ void *receiveClientInitializationMessage();
 void *handleShipExtraction(void *arg);
 void *handleShipMovement(void *arg);
 void *handleStationWarning(void *arg);
+void *handleClientInitialization(void *arg);
+
+
 
 int main() {
+    srand(time(NULL));
     int endSignal = 0;  
     initializeSettings();
 
@@ -439,17 +443,60 @@ void *handleStationWarning(void *arg) {
 }
 
 void *receiveClientInitializationMessage() {
-    msg_communication_initialization clientInitialization;
+    msg_communication_initialization message;
     while (1) {
-        ssize_t n = mq_receive(clientInitializationCommunicationQueue, (char *)&clientInitialization, sizeof(clientInitialization), 0);
+        ssize_t n = mq_receive(clientInitializationCommunicationQueue, (char *)&message, sizeof(message), 0);
         if (n == -1) {
             perror("While receiving message from client initialization queue");
             exit(1);
         }
 
-        if (n == sizeof(clientInitialization)) {
+        if (n == sizeof(message)) {
             printf("received a message from the client initialization queue\n");
+
+            msg_communication_initialization *clientInitialization = malloc(sizeof(message));
+            if (clientInitialization == NULL) {
+                perror("Failed to allocate memory for handleClientInitialization thread");
+                exit(1);
+            }
+
+            *clientInitialization = message;
+            pthread_t t_handleClientInitialization;
+            if (pthread_create(&t_handleClientInitialization, NULL, (void *)handleClientInitialization, clientInitialization) != 0) {
+                perror("Failed to create thread for handleClientInitialization");
+                free(clientInitialization);
+                continue;
+            }
+
+            pthread_detach(t_handleClientInitialization);
         }
 
     }
+}
+
+void *handleClientInitialization(void *arg) {
+    msg_communication_initialization *clientInitialization = (msg_communication_initialization *)arg;
+
+    int chosenX;
+    int chosenY;
+    bool wasPlaced = false;
+
+    while (!wasPlaced) {
+        chosenX = rand() % DEFAULT_MAP_WIDTH;
+        chosenY = rand() % DEFAULT_MAP_HEIGHT;
+
+        if (sem_trywait(&gameMap->map[chosenX][chosenY].mutex) == 0) {
+            if (clientInitialization->typeStored == SHIP) {
+                gameMap->map[chosenX][chosenY].typeStored = SHIP;
+                gameMap->map[chosenX][chosenY].ship = clientInitialization->ship;
+            } else if (clientInitialization->typeStored == STATION) {
+                gameMap->map[chosenX][chosenY].typeStored = STATION;
+//                gameMap->map[chosenX][chosenY].station = clientInitialization->station;
+            }
+
+            wasPlaced = true;
+        }
+    }
+
+    free(clientInitialization);
 }
