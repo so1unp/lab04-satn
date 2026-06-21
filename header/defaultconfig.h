@@ -19,4 +19,11 @@
 #define DEFAULT_MAXIMUM_QUANTITY_SEMAFORITA 200
 #define DEFAULT_MAXIMUM_QUANTITY_KERNELIO 100
 
+typedef enum {
+    EMPTY,
+    SHIP,
+    ASTEROID,
+    STATION
+} EntityType;
+
 #endif

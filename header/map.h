@@ -7,13 +7,6 @@
 #include <defaultconfig.h>
 #include <semaphore.h> 
 
-typedef enum {
-    EMPTY,
-    SHIP,
-    ASTEROID,
-    STATION
-} EntityType;
-
 typedef struct {
     EntityType typeStored;
     t_nave ship;
