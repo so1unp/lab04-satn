@@ -126,6 +126,7 @@ int generateAsteroids () {
         gameMap->map[position_y][position_x].asteroid.semaforita = rand() % (MAXIMUM_QUANTITY_SEMAFORITA + 1);
         gameMap->map[position_y][position_x].typeStored = ASTEROID;
         sem_init(&(gameMap->map[position_y][position_x].asteroid.mutex), 0, 1);
+        sem_wait(&(gameMap->map[position_y][position_x].mutex));
     }
 }
 
@@ -263,6 +264,7 @@ int closeSettings() {
 
 }
 
+/* 
 MapCell* findMapCellByClient(pid_t pid) {
     for (int i = 0; i < DEFAULT_MAP_HEIGHT; i++) {
         for (int j = 0; j < DEFAULT_MAP_WIDTH; j++) {
@@ -273,6 +275,7 @@ MapCell* findMapCellByClient(pid_t pid) {
     }
     return NULL;
 }
+ */
 
 void *receiveShipMovementMessage() {
     msg_communication_movement message;
@@ -310,17 +313,22 @@ void *receiveShipMovementMessage() {
 void *handleShipMovement(void *arg) {
     msg_communication_movement *shipMovement = (msg_communication_movement *)arg;
 
-    if (sem_trywait(&gameMap->map[shipMovement->shipYMovement][shipMovement->shipXMovement].mutex) == 0) {
-        MapCell *currentCell = findMapCellByClient(shipMovement->shipPid);
-        gameMap->map[shipMovement->shipYMovement][shipMovement->shipXMovement].typeStored = SHIP;
-        gameMap->map[shipMovement->shipYMovement][shipMovement->shipXMovement].ship = currentCell->ship;
+    int shipOriginalXPosition = shipMovement->shipCurrentX;
+    int shipOriginalYPosition = shipMovement->shipCurrentY;
+    int shipNewXPosition = shipMovement->shipXMovement;
+    int shipNewYPosition = shipMovement->shipYMovement;
 
-        gameMap->map[shipMovement->shipYMovement][shipMovement->shipXMovement].ship.pos_x = shipMovement->shipXMovement;
-        gameMap->map[shipMovement->shipYMovement][shipMovement->shipXMovement].ship.pos_y = shipMovement->shipYMovement;
+    if (sem_trywait(&gameMap->map[shipNewYPosition][shipNewXPosition].mutex) == 0) {
+        gameMap->map[shipNewYPosition][shipNewXPosition].typeStored = SHIP;
+        gameMap->map[shipNewYPosition][shipNewXPosition].ship = gameMap->map[shipOriginalYPosition][shipOriginalXPosition].ship;
 
-        currentCell->typeStored = EMPTY;
+        gameMap->map[shipNewYPosition][shipNewXPosition].ship.pos_x = shipNewXPosition;
+        gameMap->map[shipNewYPosition][shipNewXPosition].ship.pos_y = shipNewYPosition;
 
-        sem_post(&currentCell->mutex);
+        gameMap->map[shipOriginalYPosition][shipOriginalXPosition].typeStored = EMPTY;
+        sem_post(&gameMap->map[shipOriginalYPosition][shipOriginalXPosition].mutex);
+    }   else {
+        printf("REEEEEE");
     }
 
     free(shipMovement);
@@ -500,8 +508,8 @@ void *handleClientInitialization(void *arg) {
     bool wasPlaced = false;
 
     while (!wasPlaced) {
-        chosenX = rand() % DEFAULT_MAP_HEIGHT;
-        chosenY = rand() % DEFAULT_MAP_WIDTH;
+        chosenY = rand() % DEFAULT_MAP_HEIGHT;
+        chosenX = rand() % DEFAULT_MAP_WIDTH;
 
         if (sem_trywait(&gameMap->map[chosenY][chosenX].mutex) == 0) {
             if (clientInitialization->typeStored == SHIP) {

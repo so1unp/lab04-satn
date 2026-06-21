@@ -232,9 +232,13 @@ void enviar_comando(char cmd) {
     msg_communication_movement msg;
     msg.shipPid = getpid();
 
-    pthread_mutex_lock(&mutex_nave);
-    int targetX = mi_nave.pos_x;
-    int targetY = mi_nave.pos_y;
+    int currentX = 0, currentY = 0;
+    if (!obtener_posicion_shm(&currentX, &currentY)) {
+        return; 
+    }
+
+    int targetX = currentX;
+    int targetY = currentY;
 
     switch (cmd) {
         case 'U': targetY -= 1; break; // Up
@@ -242,30 +246,36 @@ void enviar_comando(char cmd) {
         case 'L': targetX -= 1; break; // Left
         case 'R': targetX += 1; break; // Right
         case 'M': 
-            // Handle mining message setup here if needed
-            //pthread_mutex_unlock(&mi_nave.mutex_nave);
             return;
     }
 
-    // Boundary containment safety check before bothering the server
     if (targetX >= 0 && targetX < DEFAULT_MAP_WIDTH && targetY >= 0 && targetY < DEFAULT_MAP_HEIGHT) {
+        msg.shipCurrentX = currentX;
+        msg.shipCurrentY = currentY;
         msg.shipXMovement = targetX;
         msg.shipYMovement = targetY;
         
-        // Optimistically update local state or let server-sync handling update it
-        mi_nave.pos_x = targetX;
-        mi_nave.pos_y = targetY;
-    } else {
-        pthread_mutex_unlock(&mutex_nave);
-        return;
-    }
-    pthread_mutex_unlock(&mutex_nave);
-
-    // Send the structured data block to the server
-    if (mq_send(cola_movimiento, (const char*)&msg, sizeof(msg), 0) == -1) {
-        perror("Failed to send movement packet");
+        if (mq_send(cola_movimiento, (const char*)&msg, sizeof(msg), 0) == -1) {
+            perror("Failed to send movement packet");
+        }
     }
 }
+
+int obtener_posicion_shm(int *actualX, int *actualY) {
+    pid_t mi_pid = getpid();
+    for (int y = 0; y < DEFAULT_MAP_HEIGHT; y++) {
+        for (int x = 0; x < DEFAULT_MAP_WIDTH; x++) {
+            if (gameMap->map[y][x].typeStored == SHIP && gameMap->map[y][x].ship.id == mi_pid) {
+                *actualX = x;
+                *actualY = y;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+
 
 // --- PROGRAMA PRINCIPAL ---
 
@@ -289,20 +299,6 @@ int main() {
 
     sleep(1);
 
-    int found = 0;
-    for (int y = 0; y < DEFAULT_MAP_HEIGHT && !found; y++) {
-        for (int x = 0; x < DEFAULT_MAP_WIDTH; x++) {
-            if (gameMap->map[y][x].typeStored == SHIP && gameMap->map[y][x].ship.id == mi_nave.id) {
-                pthread_mutex_lock(&mutex_nave);
-                mi_nave.pos_x = x;
-                mi_nave.pos_y = y;
-                pthread_mutex_unlock(&mutex_nave);
-                found = 1;
-                break;
-            }
-        }
-    }
-
     inicializar_visuales();
 
     pthread_create(&thread_visual, NULL, hilo_renderizador, (void*)&mi_nave);
@@ -311,7 +307,6 @@ int main() {
     // Bucle de Input: Lee teclas y las despacha por la Cola de Mensajes
     while ((ch = getch()) != TECLA_SALIR) {
         
-        // 1. Check state safely and modify fuel inside an isolated block
         pthread_mutex_lock(&mutex_nave);
         int puede_moverse = (mi_nave.estado == ESTADO_VIVO && mi_nave.combustible > 0);
         
@@ -326,9 +321,8 @@ int main() {
                 default:        puede_moverse = 0;                             break;
             }
         }
-        pthread_mutex_unlock(&mutex_nave); // 2. ALWAYS UNLOCK HERE FIRST
+        pthread_mutex_unlock(&mutex_nave);
 
-        // 3. Now it is completely safe to call without deadlocking
         if (puede_moverse) {
             switch (ch) {
                 case KEY_UP:    enviar_comando('U'); break;

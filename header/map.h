@@ -15,7 +15,6 @@ typedef struct {
     sem_t mutex;
 } MapCell;
 
-
 typedef struct {
     MapCell map[DEFAULT_MAP_HEIGHT][DEFAULT_MAP_WIDTH];
 } Map;
