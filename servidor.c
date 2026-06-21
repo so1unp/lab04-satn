@@ -38,6 +38,7 @@ pthread_t t_receiveStationWarningMessage;
 void *receiveShipMovementMessage();
 void *receiveShipExtractionMessage();
 void *receiveStationWarningMessage();
+void *handleShipExtraction(void *arg);
 
 int main() {
     int endSignal = 0;  
@@ -235,20 +236,78 @@ void *receiveShipMovementMessage() {
 }
 
 void *receiveShipExtractionMessage() {
-    msg_communication_extraction shipExtraction;
-    int row = 1;
+    msg_communication_extraction message;
+
     while (1) {
-        ssize_t n = mq_receive(shipExtractionCommunicationQueue, (char *)&shipExtraction, sizeof(shipExtraction), 0);
+        ssize_t n = mq_receive(shipExtractionCommunicationQueue, (char *)&message, sizeof(message), 0);
         if (n == -1) {
             perror("While receiving message from ship extraction queue");
             exit(1);
         }
 
-        if (n == sizeof(shipExtraction)) {
+        if (n == sizeof(message)) {
             printf("received a message from the extraction queue\n");
+
+            msg_communication_extraction *shipExtraction = malloc(sizeof(message));
+            if (shipExtraction == NULL) {
+                perror("Failed to allocate memory for handleShipExtraction thread");
+                exit(1);
+            }
+
+            *shipExtraction = message;
+            pthread_t t_handleShipExtraction;
+            if (pthread_create(&t_handleShipExtraction, NULL, (void *)handleShipExtraction, shipExtraction) != 0) {
+                perror("Failed to create thread for handleShipExtraction");
+                free(shipExtraction);
+                continue;
+            }
+
+            pthread_detach(t_handleShipExtraction);
+
         }
  
     }
+}
+
+void *handleShipExtraction(void *arg) {
+    msg_communication_extraction *shipExtraction = (msg_communication_extraction *)arg;
+
+    if (sem_wait(&gameMap->map[shipExtraction->asteroidXPosition][shipExtraction->asteroidYPosition].asteroid.mutex) == 0) {
+        MapCell *currentCell = &gameMap->map[shipExtraction->asteroidXPosition][shipExtraction->asteroidYPosition];
+        if (currentCell->typeStored == ASTEROID && currentCell->asteroid.isActive) {
+            currentCell->asteroid.deuterio -= shipExtraction->deuterioQuantity;
+            if (currentCell->asteroid.deuterio < 0) {
+                currentCell->asteroid.deuterio = 0;
+            } 
+
+            currentCell->asteroid.kernelio -= shipExtraction->kernelioQuantity;
+            if (currentCell->asteroid.kernelio < 0) {
+                currentCell->asteroid.kernelio = 0;
+            }
+
+            currentCell->asteroid.mutexio -= shipExtraction->mutexioExtracted;
+            if (currentCell->asteroid.mutexio < 0) {
+                currentCell->asteroid.mutexio = 0;
+            } 
+
+            currentCell->asteroid.semaforita -= shipExtraction->semaforitaQuantity;
+            if (currentCell->asteroid.semaforita < 0) {
+                currentCell->asteroid.semaforita = 0;
+            } 
+
+            if (currentCell->asteroid.deuterio == 0 && 
+                currentCell->asteroid.kernelio == 0 && 
+                currentCell->asteroid.mutexio == 0 && 
+                currentCell->asteroid.semaforita == 0) {
+                
+                currentCell->asteroid.isActive = false;
+            }
+        }
+
+        sem_post(&gameMap->map[shipExtraction->asteroidXPosition][shipExtraction->asteroidYPosition].asteroid.mutex);
+    }
+    free(shipExtraction);
+
 }
 
 void *receiveStationWarningMessage() {

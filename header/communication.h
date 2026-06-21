@@ -22,6 +22,10 @@ typedef struct {
 } msg_communication_extraction;
 
 typedef struct {
+    bool wasSuccesful;
+} msg_extraction_confirmation;
+
+typedef struct {
     pid_t stationPid;
     int pos_x_station;
     int pos_y_station;
