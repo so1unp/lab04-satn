@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <defaultconfig.h>
 #include <semaphore.h> 
+#include "map.h"
 
 typedef struct {
     pid_t shipPid;
@@ -27,5 +28,11 @@ typedef struct {
     int pos_y_station;
     int fuel_station;
 } msg_communication_station_warning;
+
+typedef struct {
+    EntityType typeStored;
+    t_nave ship;
+    //STATION
+} msg_communication_initialization;
 
 #endif 

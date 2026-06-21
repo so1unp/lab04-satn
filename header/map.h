@@ -1,5 +1,5 @@
 #ifndef MAP_H
-#define MAP_h
+#define MAP_H
 
 #include <nave.h>
 #include <asteroid.h>
