@@ -19,6 +19,7 @@ int sharedMemoryFd = -1;
 mqd_t cola_aviso_estacion = -1;
 mqd_t cola_inicializacion = -1;
 mqd_t cola_movimiento = -1;
+mqd_t cola_extraccion = -1;
 char mq_name[50];
 
 // Visual local de la nave controlada
@@ -45,7 +46,6 @@ void inicializar_nave(t_nave* nave) {
     nave->inventario.mutexio = 0;
     nave->inventario.semaforita = 0;
     nave->inventario.kernelio = 0;
-
     if (pthread_mutex_init(&(mutex_nave), NULL) != 0) {
         perror("Error al inicializar el mutex de la nave");
     }
@@ -85,6 +85,12 @@ void conectar_ipc() {
         exit(1);
     }
 
+    cola_extraccion = mq_open(SERVER_EXTRACTION_COMMUNICATION_QUEUE_PATH, O_WRONLY);
+    if (cola_extraccion == (mqd_t)-1) {
+        perror("Error abriendo cola de extraccion");
+        exit(1);
+    }
+
     // 2. Creación de la Cola de Mensajes única basada en el PID
     snprintf(mq_name, sizeof(mq_name), "/mq_nave_%d", getpid());
     
@@ -121,6 +127,11 @@ void desconectar_ipc() {
     if (cola_movimiento != (mqd_t)-1) {
         mq_close(cola_movimiento);
     }
+
+    if (cola_extraccion != (mqd_t)-1) {
+        mq_close(cola_extraccion);
+    }
+
 }
 
 
@@ -156,6 +167,12 @@ void renderizar_universo_shm(t_nave* nave) {
             
             if (gameMap->map[y][x].typeStored == SHIP && gameMap->map[y][x].ship.id == nave->id) {
                 mvaddch(mapa_start_y + y, mapa_start_x + x, (chtype)caracter_nave);
+                if (sem_wait(&gameMap->map[y][x].ship.mutex) == 0) {
+                    pthread_mutex_lock(&mutex_nave);
+                    nave->inventario = gameMap->map[y][x].ship.inventario;
+                    pthread_mutex_unlock(&mutex_nave);
+                    sem_post(&gameMap->map[y][x].ship.mutex);
+                }
             } 
             else if (gameMap->map[y][x].typeStored == SHIP) {
                 mvaddch(mapa_start_y + y, mapa_start_x + x, (chtype)'S');
@@ -237,6 +254,30 @@ void enviar_comando(char cmd) {
         return; 
     }
 
+    if (cmd == 'M') {
+        int asteroidX = 0, asteroidY = 0;
+        
+        if (buscar_entidad_adyacente(currentX, currentY, ASTEROID, &asteroidX, &asteroidY)) {
+            msg_communication_extraction ext_msg;
+            ext_msg.shipPid = getpid();
+            ext_msg.shipCurrentX = currentX;
+            ext_msg.shipCurrentY = currentY;
+            ext_msg.asteroidXPosition = asteroidX;
+            ext_msg.asteroidYPosition = asteroidY;
+            
+            ext_msg.deuterioQuantity = 5;
+            ext_msg.kernelioQuantity = 5;
+            ext_msg.mutexioQuantity = 5;
+            ext_msg.semaforitaQuantity = 5;
+
+            if (mq_send(cola_extraccion, (const char*)&ext_msg, sizeof(ext_msg), 0) == -1) {
+                perror("Failed to send extraction packet");
+            }
+        }
+        return;
+    }
+
+
     int targetX = currentX;
     int targetY = currentY;
 
@@ -245,8 +286,6 @@ void enviar_comando(char cmd) {
         case 'D': targetY += 1; break; // Down
         case 'L': targetX -= 1; break; // Left
         case 'R': targetX += 1; break; // Right
-        case 'M': 
-            return;
     }
 
     if (targetX >= 0 && targetX < DEFAULT_MAP_WIDTH && targetY >= 0 && targetY < DEFAULT_MAP_HEIGHT) {
@@ -259,6 +298,27 @@ void enviar_comando(char cmd) {
             perror("Failed to send movement packet");
         }
     }
+}
+
+int buscar_entidad_adyacente(int shipX, int shipY, EntityType objetivo, int *targetX, int *targetY) {
+    // Offset vectors for: Up, Down, Left, Right
+    int dx[] = { 0,  0, -1,  1};
+    int dy[] = {-1,  1,  0,  0};
+
+    for (int i = 0; i < 4; i++) {
+        int checkX = shipX + dx[i];
+        int checkY = shipY + dy[i];
+
+        // Check map boundaries
+        if (checkX >= 0 && checkX < DEFAULT_MAP_WIDTH && checkY >= 0 && checkY < DEFAULT_MAP_HEIGHT) {
+            if (gameMap->map[checkY][checkX].typeStored == objetivo) {
+                *targetX = checkX;
+                *targetY = checkY;
+                return 1; // Found it!
+            }
+        }
+    }
+    return 0; // No matching adjacent entity
 }
 
 int obtener_posicion_shm(int *actualX, int *actualY) {

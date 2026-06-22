@@ -16,17 +16,15 @@ typedef struct {
 
 typedef struct {
     pid_t shipPid;
+    int shipCurrentX;
+    int shipCurrentY;
     int asteroidXPosition;
     int asteroidYPosition;
-    int mutexioExtracted;
+    int mutexioQuantity;
     int semaforitaQuantity;
     int deuterioQuantity;
     int kernelioQuantity;
 } msg_communication_extraction;
-
-typedef struct {
-    bool wasSuccesful;
-} msg_extraction_confirmation;
 
 typedef struct {
     int pos_x_station;
