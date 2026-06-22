@@ -14,11 +14,19 @@
 #define TECLA_MINAR 'm'
 #define DURACION_ALERTA_SEGUNDOS 3
 
+// === NUEVO: DEFINICIÓN DE TECLA DE INTERCAMBIO ===
+#define TECLA_ESTACION 'e'
+// ======================================================
+
 void* hilo_renderizador(void* arg);
 void* hilo_soporte_vital(void* arg);
 void* hilo_aviso_estacion();
 int obtener_posicion_shm(int *actualX, int *actualY);
 int buscar_entidad_adyacente(int shipX, int shipY, EntityType objetivo, int *targetX, int *targetY);
+
+// === NUEVO: PROTOTIPO DE LA FUNCIÓN DE INTERCAMBIO ===
+void interactuar_con_estacion();
+// ==========================================================
 
 // Variables globales para IPC
 Map *gameMap = NULL;
@@ -34,8 +42,6 @@ char caracter_nave = '^';
 volatile int juego_ejecutando = 1;
 char mensaje_alerta[100] = "";
 time_t timestamp_alerta = 0;
-
-
 
 // Instancia local para el control de recursos propios (Soporte Vital)
 t_nave mi_nave;
@@ -60,7 +66,6 @@ void inicializar_nave(t_nave* nave) {
     if (pthread_mutex_init(&(mutex_nave), NULL) != 0) {
         perror("Error al inicializar el mutex de la nave");
     }
-
 }
 
 void destruir_nave(t_nave* nave) {
@@ -108,10 +113,19 @@ void conectar_ipc() {
     struct mq_attr attr;
     attr.mq_flags = 0;
     attr.mq_maxmsg = 10;
-    attr.mq_msgsize = sizeof(msg_communication_station_warning);
+    
+    // === NUEVO: TAMAÑO DE COLA ADAPTADO ===
+    // Aseguramos que la cola local pueda albergar tanto alertas de estación como las respuestas de intercambio
+    size_t max_struct_size = sizeof(msg_communication_station_warning);
+    if (sizeof(msg_intercambio_respuesta) > max_struct_size) {
+        max_struct_size = sizeof(msg_intercambio_respuesta);
+    }
+    attr.mq_msgsize = max_struct_size;
+    // ===========================================
+    
     attr.mq_curmsgs = 0;
 
-    // La nave crea la cola para que el servidor le mande avisos
+    // La nave crea la cola para que el servidor le mande avisos (y ahora las estaciones respondan trueques)
     cola_aviso_estacion = mq_open(mq_name, O_CREAT | O_RDONLY, 0660, &attr);
     if (cola_aviso_estacion == (mqd_t)-1) {
         perror("Error al crear la cola de mensajes de la nave");
@@ -142,9 +156,7 @@ void desconectar_ipc() {
     if (cola_extraccion != (mqd_t)-1) {
         mq_close(cola_extraccion);
     }
-
 }
-
 
 // --- FUNCIONES VISUALES (Ncurses basados en Memoria Compartida) ---
 
@@ -267,18 +279,20 @@ void* hilo_aviso_estacion() {
     while (juego_ejecutando) {
         ssize_t n = mq_receive(cola_aviso_estacion, (char *)&message, sizeof(message), 0);
         if (n == -1) {
-            perror("While receiving message from station warning queue");
+            // Evaluamos si el error no es debido al cierre forzoso del juego
+            if (juego_ejecutando) {
+                perror("While receiving message from station warning queue");
+            }
             break;
         }
 
         if (n == sizeof(message)) {
             pthread_mutex_lock(&mutex_nave);
             snprintf(mensaje_alerta, sizeof(mensaje_alerta), 
-                     "ALERTA! Estación en [%d,%d] baja de combustible (%d)",message.pos_x_station, message.pos_y_station, message.fuel_left);
+         "ALERTA! Estación en [%d,%d] baja de combustible (%d%%)", message.pos_x_station, message.pos_y_station, message.fuel_station);
             timestamp_alerta = time(NULL); 
             pthread_mutex_unlock(&mutex_nave);
         }
-
     }
     return NULL;
 }
@@ -316,7 +330,6 @@ void enviar_comando(char cmd) {
         }
         return;
     }
-
 
     int targetX = currentX;
     int targetY = currentY;
@@ -383,7 +396,77 @@ int obtener_posicion_shm(int *actualX, int *actualY) {
     return 0;
 }
 
+// === NUEVO: LOGICA DE INTERACCIÓN DIRECTA CON LA ESTACIÓN ===
+void interactuar_con_estacion() {
+    int currentX = 0, currentY = 0;
+    int estacionX = 0, estacionY = 0;
 
+    if (!obtener_posicion_shm(&currentX, &currentY)) return;
+
+    // Verificar si hay una estación en una casilla adyacente
+    if (buscar_entidad_adyacente(currentX, currentY, STATION, &estacionX, &estacionY)) {
+        
+        pthread_mutex_lock(&mutex_nave);
+        // Consolidamos la cantidad total de materiales a entregar (Deuterio y Mutexio)
+        int recursosATrabajar = mi_nave.inventario.deuterio + mi_nave.inventario.mutexio;
+        
+        if (recursosATrabajar <= 0) {
+            snprintf(mensaje_alerta, sizeof(mensaje_alerta), "ERROR: Sin recursos (D o M) para cambiar.");
+            timestamp_alerta = time(NULL);
+            pthread_mutex_unlock(&mutex_nave);
+            return;
+        }
+        pthread_mutex_unlock(&mutex_nave);
+
+        // Generar la ruta hacia la cola privada de la estación objetivo
+        char q_estacion_name[60];
+        snprintf(q_estacion_name, sizeof(q_estacion_name), "/mq_estacion_%d_%d", estacionX, estacionY);
+        
+        mqd_t q_estacion = mq_open(q_estacion_name, O_WRONLY);
+        if (q_estacion == (mqd_t)-1) {
+            pthread_mutex_lock(&mutex_nave);
+            snprintf(mensaje_alerta, sizeof(mensaje_alerta), "Estación fuera de servicio o llena.");
+            timestamp_alerta = time(NULL);
+            pthread_mutex_unlock(&mutex_nave);
+            return;
+        }
+
+        // Preparar y enviar la solicitud de intercambio
+        msg_intercambio_solicitud req;
+        req.shipPid = getpid();
+        req.recursosEntregados = recursosATrabajar;
+
+        if (mq_send(q_estacion, (const char*)&req, sizeof(req), 0) == -1) {
+            perror("Error enviando solicitud de intercambio");
+            mq_close(q_estacion);
+            return;
+        }
+        mq_close(q_estacion);
+
+        // Bloquear la ejecución local esperando de forma síncrona la respuesta de la estación
+        msg_intercambio_respuesta res;
+        ssize_t bytes_recibidos = mq_receive(cola_aviso_estacion, (char*)&res, sizeof(res), NULL);
+        
+        if (bytes_recibidos >= 0 && res.intercambioExitoso) {
+            pthread_mutex_lock(&mutex_nave);
+            // La estación reabasteció con éxito los tanques y vació el cargamento procesado
+            mi_nave.inventario.deuterio = 0;
+            mi_nave.inventario.mutexio = 0;
+            mi_nave.combustible = res.nuevoCombustibleNave;
+            mi_nave.oxigeno = res.nuevoOxigenoNave;
+            
+            snprintf(mensaje_alerta, sizeof(mensaje_alerta), "¡Trueque Exitoso! Oxígeno y Combustible al 100%%");
+            timestamp_alerta = time(NULL);
+            pthread_mutex_unlock(&mutex_nave);
+        }
+    } else {
+        pthread_mutex_lock(&mutex_nave);
+        snprintf(mensaje_alerta, sizeof(mensaje_alerta), "No hay ninguna estación adyacente.");
+        timestamp_alerta = time(NULL);
+        pthread_mutex_unlock(&mutex_nave);
+    }
+}
+// ==================================================================
 
 // --- PROGRAMA PRINCIPAL ---
 
@@ -413,13 +496,15 @@ int main() {
     pthread_create(&thread_oxigeno, NULL, hilo_soporte_vital, (void*)&mi_nave);
     pthread_create(&thread_aviso_estacion, NULL, hilo_aviso_estacion, NULL);
 
-
     // Bucle de Input: Lee teclas y las despacha por la Cola de Mensajes
     while ((ch = getch()) != TECLA_SALIR) {
         
         pthread_mutex_lock(&mutex_nave);
         int puede_moverse = (mi_nave.estado == ESTADO_VIVO && mi_nave.combustible > 0);
         
+        // Variable testigo para identificar si el input corresponde a un intercambio
+        int es_intercambio = 0; 
+
         if (puede_moverse) {
             switch (ch) {
                 case KEY_UP:    caracter_nave = '^'; mi_nave.combustible -= 2; break;
@@ -428,10 +513,23 @@ int main() {
                 case KEY_RIGHT: caracter_nave = '>'; mi_nave.combustible -= 2; break;
                 case TECLA_MINAR:
                 case 'M':                            mi_nave.combustible -= 5; break;
+                
+                // === NUEVO: DETECCIÓN DE ENTRADA PARA INTERCAMBIO ===
+                case TECLA_ESTACION:
+                case 'E':     es_intercambio = 1;                            break;
+                // ========================================================
+                
                 default:        puede_moverse = 0;                             break;
             }
         }
         pthread_mutex_unlock(&mutex_nave);
+
+        // === NUEVO: EJECUCIÓN FUERA DEL LOCK DEL MUTEX LOCAL ===
+        if (es_intercambio) {
+            interactuar_con_estacion();
+            continue; // Saltar el envío de comandos convencionales de movimiento al servidor
+        }
+        // ============================================================
 
         if (puede_moverse) {
             switch (ch) {
