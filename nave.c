@@ -14,6 +14,12 @@
 #define TECLA_MINAR 'm'
 #define DURACION_ALERTA_SEGUNDOS 3
 
+void* hilo_renderizador(void* arg);
+void* hilo_soporte_vital(void* arg);
+void* hilo_aviso_estacion();
+int obtener_posicion_shm(int *actualX, int *actualY);
+int buscar_entidad_adyacente(int shipX, int shipY, EntityType objetivo, int *targetX, int *targetY);
+
 // Variables globales para IPC
 Map *gameMap = NULL;
 int sharedMemoryFd = -1;
@@ -274,6 +280,7 @@ void* hilo_aviso_estacion() {
         }
 
     }
+    return NULL;
 }
 
 // --- ENVIAR COMANDO AL SERVIDOR ---

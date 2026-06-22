@@ -23,7 +23,7 @@ int MAXIMUM_QUANTITY_KERNELIO = 0;
 
 Map *gameMap;
 int sharedMemoryFd;
-int shared_seg_size = (1 * sizeof(Map));
+size_t shared_seg_size = sizeof(Map);
 
 mqd_t shipMovementCommunicationQueue;
 mqd_t shipExtractionCommunicationQueue;
@@ -35,6 +35,14 @@ pthread_t t_receiveShipExtractionMessage;
 pthread_t t_receiveStationWarningMessage;
 pthread_t t_receiveClientInitializationMessage;
 
+int configurationReading();
+int generateAsteroids();
+int makeMap();
+int createQueues();
+int printMapOnStandardOutput();
+int initializeSettings();
+int closeSettings();
+
 void *receiveShipMovementMessage();
 void *receiveShipExtractionMessage();
 void *receiveStationWarningMessage();
@@ -45,7 +53,7 @@ void *handleStationWarning(void *arg);
 void *handleClientInitialization(void *arg);
 
 int main() {
-    srand(time(NULL));
+    srand((unsigned int)time(NULL));
     int endSignal = 0;  
     initializeSettings();
 
@@ -119,6 +127,7 @@ int generateAsteroids () {
         sem_init(&(gameMap->map[position_y][position_x].asteroid.mutex), 0, 1);
         sem_wait(&(gameMap->map[position_y][position_x].mutex));
     }
+    return 0;
 }
 
 int makeMap() {
@@ -128,7 +137,7 @@ int makeMap() {
         perror("In shm_open()");
         exit(1);
     }
-    ftruncate(sharedMemoryFd, shared_seg_size);
+    ftruncate(sharedMemoryFd, (off_t)shared_seg_size);
     
     gameMap = (Map *)mmap(NULL, shared_seg_size, PROT_READ | PROT_WRITE, MAP_SHARED, sharedMemoryFd, 0);
     if (gameMap == NULL) {
@@ -184,6 +193,7 @@ int createQueues() {
         perror("Error creating warning queue");
         exit(1);
     }
+    return 0;
 }
 
 int printMapOnStandardOutput() {
@@ -214,6 +224,7 @@ int printMapOnStandardOutput() {
     printf("\nTotal asteroids: %d\n", asteroidCounter);
     printf("\nTotal ships: %d\n", shipsCounter);
     printf("\nTotal stations: %d\n", stationCounter);
+    return 0;
 }
 
 int initializeSettings() {
@@ -236,6 +247,8 @@ int initializeSettings() {
     if (pthread_create(&t_receiveStationWarningMessage,NULL,(void *)receiveStationWarningMessage,NULL) != 0) {
         perror("Failed to create thread for receiveStationWarningMessage");
     }
+
+    return 0;
 }
 
 int closeSettings() {
@@ -253,6 +266,7 @@ int closeSettings() {
     pthread_cancel(t_receiveStationWarningMessage);
     pthread_cancel(t_receiveClientInitializationMessage);
 
+    return 0;
 }
 
 void *receiveShipMovementMessage() {
@@ -310,7 +324,7 @@ void *handleShipMovement(void *arg) {
     }
 
     free(shipMovement);
-
+    return NULL;
 }
 
 void *receiveShipExtractionMessage() {
@@ -418,7 +432,7 @@ printf("Semaforita extraido\n");
         sem_post(&gameMap->map[shipExtraction->asteroidYPosition][shipExtraction->asteroidXPosition].asteroid.mutex);
     }
     free(shipExtraction);
-
+    return NULL;
 }
 
 void *receiveStationWarningMessage() {
@@ -477,6 +491,7 @@ void *handleStationWarning(void *arg) {
     }
 
     free(stationWarning);
+    return NULL;
 }
 
 void *receiveClientInitializationMessage() {
@@ -537,4 +552,5 @@ void *handleClientInitialization(void *arg) {
     }
 
     free(clientInitialization);
+    return NULL;
 }
