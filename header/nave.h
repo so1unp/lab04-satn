@@ -2,6 +2,7 @@
 #define NAVE_H
 
 #include <pthread.h>
+#include <semaphore.h> 
 
 typedef enum {
     ESTADO_VIVO,
@@ -24,6 +25,7 @@ typedef struct {
     int combustible;
     e_estado_nave estado;
     t_inventario inventario;
+    sem_t mutex;
 } t_nave;
 
 void inicializar_nave(t_nave* nave);
