@@ -72,7 +72,7 @@ void destruir_nave(t_nave* nave) {
 
 void conectar_ipc() {
     // 1. Conexión a la Memoria Compartida del Servidor (Solo lectura/escritura)
-    sharedMemoryFd = shm_open(SHARED_MEMORY_PATH, O_RDWR, 0660);
+    sharedMemoryFd = shm_open(SHARED_MEMORY_PATH, O_RDWR, PERMISSIONS);
     if (sharedMemoryFd < 0) {
         perror("Error en shm_open de la nave. ¿El servidor esta corriendo?");
         exit(1);

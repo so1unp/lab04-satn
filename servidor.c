@@ -19,8 +19,6 @@ int MAXIMUM_QUANTITY_MUTEXIO = 0;
 int MAXIMUM_QUANTITY_SEMAFORITA = 0;
 int MAXIMUM_QUANTITY_KERNELIO = 0;
 
-#define QUEUE_PERMISSIONS 0666
-
 Map *gameMap;
 int sharedMemoryFd;
 size_t shared_seg_size = sizeof(Map);
@@ -53,6 +51,7 @@ void *handleStationWarning(void *arg);
 void *handleClientInitialization(void *arg);
 
 int main() {
+    umask(0000);
     srand((unsigned int)time(NULL));
     int endSignal = 0;  
     initializeSettings();
@@ -132,7 +131,7 @@ int generateAsteroids () {
 
 int makeMap() {
     
-    sharedMemoryFd = shm_open(SHARED_MEMORY_PATH, O_CREAT | O_RDWR, S_IRWXU | S_IRWXG);
+    sharedMemoryFd = shm_open(SHARED_MEMORY_PATH, O_CREAT | O_RDWR, PERMISSIONS);
     if (sharedMemoryFd < 0) {
         perror("In shm_open()");
         exit(1);
@@ -167,28 +166,28 @@ int createQueues() {
     attr.mq_maxmsg = 10;
     attr.mq_msgsize = (1*sizeof(msg_communication_movement));
     attr.mq_curmsgs = 0;
-    shipMovementCommunicationQueue = mq_open(SERVER_MOVEMENT_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDONLY, QUEUE_PERMISSIONS, &attr);
+    shipMovementCommunicationQueue = mq_open(SERVER_MOVEMENT_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDONLY, PERMISSIONS, &attr);
     if (shipMovementCommunicationQueue == (mqd_t)-1) {
         perror("Error creating movement queue");
         exit(1);
     }
 
     attr.mq_msgsize = (1*sizeof(msg_communication_extraction));
-    shipExtractionCommunicationQueue = mq_open(SERVER_EXTRACTION_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDONLY, QUEUE_PERMISSIONS, &attr);
+    shipExtractionCommunicationQueue = mq_open(SERVER_EXTRACTION_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDONLY, PERMISSIONS, &attr);
     if (shipExtractionCommunicationQueue == (mqd_t)-1) {
         perror("Error creating movement queue");
         exit(1);
     }
 
     attr.mq_msgsize = (1*sizeof(msg_communication_station_warning));
-    stationWarningCommunicationQueue = mq_open(SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDONLY, QUEUE_PERMISSIONS, &attr);
+    stationWarningCommunicationQueue = mq_open(SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDONLY, PERMISSIONS, &attr);
     if (stationWarningCommunicationQueue == (mqd_t)-1) {
         perror("Error creating warning queue");
         exit(1);
     }
 
     attr.mq_msgsize = (1*sizeof(msg_communication_initialization));
-    clientInitializationCommunicationQueue = mq_open(SERVER_CLIENT_INITIALIZATION_QUEUE_PATH, O_CREAT | O_RDONLY, QUEUE_PERMISSIONS, &attr);
+    clientInitializationCommunicationQueue = mq_open(SERVER_CLIENT_INITIALIZATION_QUEUE_PATH, O_CREAT | O_RDONLY, PERMISSIONS, &attr);
     if (clientInitializationCommunicationQueue == (mqd_t)-1) {
         perror("Error creating warning queue");
         exit(1);
