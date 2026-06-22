@@ -12,6 +12,7 @@
 
 #define TECLA_SALIR 'q'
 #define TECLA_MINAR 'm'
+#define DURACION_ALERTA_SEGUNDOS 3
 
 // Variables globales para IPC
 Map *gameMap = NULL;
@@ -25,6 +26,10 @@ char mq_name[50];
 // Visual local de la nave controlada
 char caracter_nave = '^';
 volatile int juego_ejecutando = 1;
+char mensaje_alerta[100] = "";
+time_t timestamp_alerta = 0;
+
+
 
 // Instancia local para el control de recursos propios (Soporte Vital)
 t_nave mi_nave;
@@ -209,7 +214,15 @@ void renderizar_universo_shm(t_nave* nave) {
     mvprintw(panel_start_y + 4, panel_start_x, "   INVENTARIO: D: %d | M: %d | S: %d | K: %d",
              nave->inventario.deuterio, nave->inventario.mutexio, 
              nave->inventario.semaforita, nave->inventario.kernelio);
-    mvprintw(panel_start_y + 5, panel_start_x, " ================================================== ");
+    if (timestamp_alerta > 0 && (time(NULL) - timestamp_alerta) < DURACION_ALERTA_SEGUNDOS) {
+        attron(A_BOLD);
+        mvprintw(panel_start_y + 5, panel_start_x, "   %s", mensaje_alerta);
+        attroff(A_BOLD);
+    } else {
+        mensaje_alerta[0] = '\0';
+        timestamp_alerta = 0;
+        mvprintw(panel_start_y + 5, panel_start_x, " ================================================== ");
+    }
     pthread_mutex_unlock(&mutex_nave);
     
     refresh();
@@ -241,6 +254,26 @@ void* hilo_soporte_vital(void* arg) {
         pthread_mutex_unlock(&mutex_nave);
     }
     return NULL;
+}
+
+void* hilo_aviso_estacion() {
+    msg_communication_station_warning message;
+    while (juego_ejecutando) {
+        ssize_t n = mq_receive(cola_aviso_estacion, (char *)&message, sizeof(message), 0);
+        if (n == -1) {
+            perror("While receiving message from station warning queue");
+            break;
+        }
+
+        if (n == sizeof(message)) {
+            pthread_mutex_lock(&mutex_nave);
+            snprintf(mensaje_alerta, sizeof(mensaje_alerta), 
+                     "ALERTA! Estación en [%d,%d] baja de combustible (%d)",message.pos_x_station, message.pos_y_station, message.fuel_left);
+            timestamp_alerta = time(NULL); 
+            pthread_mutex_unlock(&mutex_nave);
+        }
+
+    }
 }
 
 // --- ENVIAR COMANDO AL SERVIDOR ---
@@ -282,10 +315,18 @@ void enviar_comando(char cmd) {
     int targetY = currentY;
 
     switch (cmd) {
-        case 'U': targetY -= 1; break; // Up
-        case 'D': targetY += 1; break; // Down
-        case 'L': targetX -= 1; break; // Left
-        case 'R': targetX += 1; break; // Right
+        case 'U':
+            targetY -= 1;
+            break; // Up
+        case 'D':
+            targetY += 1;
+            break; // Down
+        case 'L':
+            targetX -= 1;
+            break; // Left
+        case 'R':
+            targetX += 1;
+            break; // Right
     }
 
     if (targetX >= 0 && targetX < DEFAULT_MAP_WIDTH && targetY >= 0 && targetY < DEFAULT_MAP_HEIGHT) {
@@ -341,7 +382,7 @@ int obtener_posicion_shm(int *actualX, int *actualY) {
 
 int main() {
     int ch;
-    pthread_t thread_visual, thread_oxigeno;
+    pthread_t thread_visual, thread_oxigeno, thread_aviso_estacion;
 
     // Conexión obligatoria al entorno IPC antes de inicializar ncurses
     conectar_ipc();
@@ -363,6 +404,8 @@ int main() {
 
     pthread_create(&thread_visual, NULL, hilo_renderizador, (void*)&mi_nave);
     pthread_create(&thread_oxigeno, NULL, hilo_soporte_vital, (void*)&mi_nave);
+    pthread_create(&thread_aviso_estacion, NULL, hilo_aviso_estacion, NULL);
+
 
     // Bucle de Input: Lee teclas y las despacha por la Cola de Mensajes
     while ((ch = getch()) != TECLA_SALIR) {
@@ -399,6 +442,9 @@ int main() {
     juego_ejecutando = 0;           
     pthread_join(thread_visual, NULL); 
     pthread_join(thread_oxigeno, NULL); 
+
+    pthread_cancel(thread_aviso_estacion); 
+    pthread_join(thread_aviso_estacion, NULL);
 
     finalizar_visuales();
     destruir_nave(&mi_nave);
