@@ -318,8 +318,6 @@ void *handleShipMovement(void *arg) {
 
         gameMap->map[shipOriginalYPosition][shipOriginalXPosition].typeStored = EMPTY;
         sem_post(&gameMap->map[shipOriginalYPosition][shipOriginalXPosition].mutex);
-    }   else {
-        printf("REEEEEE");
     }
 
     free(shipMovement);
@@ -362,7 +360,6 @@ void *receiveShipExtractionMessage() {
 
 void *handleShipExtraction(void *arg) {
     msg_communication_extraction *shipExtraction = (msg_communication_extraction *)arg;
-    printf("Hilo para extraer funciona\n");
     if (sem_wait(&gameMap->map[shipExtraction->asteroidYPosition][shipExtraction->asteroidXPosition].asteroid.mutex) == 0) {
         MapCell *asteroidCell = &gameMap->map[shipExtraction->asteroidYPosition][shipExtraction->asteroidXPosition];
         if (asteroidCell->typeStored == ASTEROID && asteroidCell->asteroid.isActive) {
@@ -374,7 +371,6 @@ void *handleShipExtraction(void *arg) {
                 amountDeuterio = asteroidCell->asteroid.deuterio;
             }
             asteroidCell->asteroid.deuterio -= amountDeuterio;
-            printf("Deuterio extraido\n");
 
             int amountKernelio = 0;
             if (asteroidCell->asteroid.kernelio >= shipExtraction->kernelioQuantity) {
@@ -383,7 +379,6 @@ void *handleShipExtraction(void *arg) {
                 amountKernelio = asteroidCell->asteroid.kernelio;
             }
             asteroidCell->asteroid.kernelio -= amountKernelio;
-printf("Kernelio extraido\n");
 
             int amountMutexio = 0;
             if (asteroidCell->asteroid.mutexio >= shipExtraction->mutexioQuantity) {
@@ -392,7 +387,6 @@ printf("Kernelio extraido\n");
                 amountMutexio = asteroidCell->asteroid.mutexio;
             }
             asteroidCell->asteroid.mutexio -= amountMutexio;
-printf("MUtexio extraido\n");
 
             int amountSemaforita = 0;
             if (asteroidCell->asteroid.semaforita >= shipExtraction->semaforitaQuantity) {
@@ -401,7 +395,6 @@ printf("MUtexio extraido\n");
                 amountSemaforita = asteroidCell->asteroid.semaforita;
             }
             asteroidCell->asteroid.semaforita -= amountSemaforita;
-printf("Semaforita extraido\n");
 
             if (asteroidCell->asteroid.deuterio == 0 && 
                 asteroidCell->asteroid.kernelio == 0 && 
@@ -411,7 +404,6 @@ printf("Semaforita extraido\n");
                 asteroidCell->asteroid.isActive = false;
                 asteroidCell->typeStored = EMPTY;
                 sem_post(&asteroidCell->mutex);
-                printf("Asteroide sin recursos\n");
             }
 
             if (sem_wait(&gameMap->map[shipExtraction->shipCurrentY][shipExtraction->shipCurrentX].ship.mutex) == 0) {
@@ -423,7 +415,6 @@ printf("Semaforita extraido\n");
                     gameMap->map[shipExtraction->shipCurrentY][shipExtraction->shipCurrentX].ship.inventario.semaforita += amountSemaforita;
                 }
                 sem_post(&gameMap->map[shipExtraction->shipCurrentY][shipExtraction->shipCurrentX].ship.mutex);
-                printf("Nave actualizada\n");
             }
 
         }
