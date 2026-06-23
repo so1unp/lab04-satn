@@ -349,7 +349,6 @@ void enviar_comando(char cmd) {
 }
 
 int buscar_entidad_adyacente(int shipX, int shipY, EntityType objetivo, int *targetX, int *targetY) {
-    // Offset vectors for: Up, Down, Left, Right
     int dx[] = { 0,  0, -1,  1};
     int dy[] = {-1,  1,  0,  0};
 
@@ -357,16 +356,15 @@ int buscar_entidad_adyacente(int shipX, int shipY, EntityType objetivo, int *tar
         int checkX = shipX + dx[i];
         int checkY = shipY + dy[i];
 
-        // Check map boundaries
         if (checkX >= 0 && checkX < DEFAULT_MAP_WIDTH && checkY >= 0 && checkY < DEFAULT_MAP_HEIGHT) {
             if (gameMap->map[checkY][checkX].typeStored == objetivo) {
                 *targetX = checkX;
                 *targetY = checkY;
-                return 1; // Found it!
+                return 1;
             }
         }
     }
-    return 0; // No matching adjacent entity
+    return 0;
 }
 
 int obtener_posicion_shm(int *actualX, int *actualY) {
