@@ -35,6 +35,27 @@ mqd_t cola_aviso_poco_combustible = -1;
 /* --- Definición de Funciones --- */
 
 /**
+ * @brief Inicializa las colas de mensajes.
+ */
+void conectar_ipc() {
+
+    // Abre la cola de mensajes del servidor
+    cola_aviso_poco_combustible = mq_open(SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH, O_WRONLY | O_NONBLOCK); 
+    if (cola_aviso_poco_combustible == (mqd_t)-1) {
+        perror("Error al abrir la cola de mensajes del servidor");
+        exit(1);
+    }
+    
+    cola_inicializacion = mq_open(SERVER_CLIENT_INITIALIZATION_QUEUE_PATH, O_WRONLY);
+    if (cola_inicializacion == (mqd_t)-1) {
+        perror("Error abriendo cola de inicializacion");
+        exit(1);
+    }
+
+}
+
+
+/**
  * @brief Inicializa los valores por defecto de la estructura de la estación.
  * @param a_station Puntero a la estructura de la estación a inicializar.
  * @param pos_x Coordenada inicial en el eje X asignada por el servidor.
@@ -60,13 +81,6 @@ void send_warning_message_servidor(station *a_station) {
         return;
     }
 
-    // Abre la cola de mensajes del servidor en modo solo escritura y No Bloqueante
-    cola_aviso_poco_combustible = mq_open(SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH, O_WRONLY | O_NONBLOCK); 
-    if (cola_aviso_poco_combustible == (mqd_t)-1) {
-        perror("Error al abrir la cola de mensajes del servidor");
-        return;
-    }
-
     // Preparación del paquete de datos
     msg_communication_station_warning msg;
     msg.station_pid = getpid();
@@ -74,8 +88,7 @@ void send_warning_message_servidor(station *a_station) {
     msg.pos_y_station = a_station->pos_y;
     msg.fuel_left = a_station->fuel;
 
-    printf("\n[Enviando al Servidor] PID: %d | Pos: (%d, %d) | Fuel: %d%%\n", 
-           msg.station_pid, msg.pos_x_station, msg.pos_y_station, msg.fuel_left);
+    printf("\n[Enviando al Servidor] PID: %d | Pos: (%d, %d) | Fuel: %d%%\n", msg.station_pid, msg.pos_x_station, msg.pos_y_station, msg.fuel_left);
 
     // Envío del mensaje casteado a const char* bajo el estándar POSIX
     if (mq_send(cola_aviso_poco_combustible, (const char *)&msg, sizeof(msg_communication_station_warning), 0) == -1) {
@@ -165,12 +178,8 @@ int main(int argc, char *argv[]) {
     printf("Started station\n");
     inicializar_estacion(&my_station, pos_x, pos_y);
 
-    cola_inicializacion = mq_open(SERVER_CLIENT_INITIALIZATION_QUEUE_PATH, O_WRONLY);
-    if (cola_inicializacion == (mqd_t)-1) {
-        perror("Error abriendo cola de inicializacion");
-        exit(1);
-    }
-    
+    conectar_ipc();
+
     msg_communication_initialization init_msg;
     init_msg.typeStored = STATION;
     init_msg.a_station = my_station; 

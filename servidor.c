@@ -65,7 +65,6 @@ int main() {
             endSignal = 0;
         }
     } 
-
     closeSettings();
     exit(0);
 }
