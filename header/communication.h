@@ -5,6 +5,7 @@
 #include <defaultconfig.h>
 #include <semaphore.h> 
 #include <nave.h>
+#include <estacion.h>
 
 typedef struct {
     pid_t shipPid;
@@ -36,7 +37,7 @@ typedef struct {
 typedef struct {
     EntityType typeStored;
     t_nave ship;
-    //STATION
+    station a_station;
 } msg_communication_initialization;
 
 #endif 

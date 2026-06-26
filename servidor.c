@@ -40,6 +40,8 @@ int createQueues();
 int printMapOnStandardOutput();
 int initializeSettings();
 int closeSettings();
+int spawnStations();
+
 
 void *receiveShipMovementMessage();
 void *receiveShipExtractionMessage();
@@ -229,6 +231,7 @@ int printMapOnStandardOutput() {
 int initializeSettings() {
     configurationReading();
     makeMap();
+    spawnStations();
     createQueues();
 
     if (pthread_create(&t_receiveShipMovementMessage,NULL,(void *)receiveShipMovementMessage,NULL) != 0) {
@@ -523,24 +526,115 @@ void *handleClientInitialization(void *arg) {
     int chosenY;
     bool wasPlaced = false;
 
-    while (!wasPlaced) {
-        chosenY = rand() % DEFAULT_MAP_HEIGHT;
-        chosenX = rand() % DEFAULT_MAP_WIDTH;
+    // --- CASO 1: ES UNA NAVE (Spawn Aleatorio) ---
+    if (clientInitialization->typeStored == SHIP) {
+        while (!wasPlaced) {
 
-        if (sem_trywait(&gameMap->map[chosenY][chosenX].mutex) == 0) {
-            if (clientInitialization->typeStored == SHIP) {
-                gameMap->map[chosenY][chosenX].typeStored = SHIP;
-                gameMap->map[chosenY][chosenX].ship = clientInitialization->ship;
-                sem_init(&(gameMap->map[chosenY][chosenX].ship.mutex), 1, 1);
-            } else if (clientInitialization->typeStored == STATION) {
-                gameMap->map[chosenY][chosenX].typeStored = STATION;
-//                gameMap->map[chosenX][chosenY].station = clientInitialization->station;
+            chosenY = (rand() % (DEFAULT_MAP_HEIGHT - 2)) + 1;
+            chosenX = (rand() % (DEFAULT_MAP_WIDTH - 2)) + 1;
+
+            if (sem_trywait(&gameMap->map[chosenY][chosenX].mutex) == 0) {
+                if (gameMap->map[chosenY][chosenX].typeStored == EMPTY) {
+                    gameMap->map[chosenY][chosenX].typeStored = SHIP;
+                    gameMap->map[chosenY][chosenX].ship = clientInitialization->ship;
+                    
+                    gameMap->map[chosenY][chosenX].ship.pos_x = chosenX;
+                    gameMap->map[chosenY][chosenX].ship.pos_y = chosenY;
+                    
+                    sem_init(&(gameMap->map[chosenY][chosenX].ship.mutex), 1, 1);
+                    wasPlaced = true;
+                    
+                    printf("[Servidor] Nave PID %d colocada en (%d, %d)\n", 
+                           clientInitialization->ship.id, chosenX, chosenY);
+                } else {
+                    sem_post(&gameMap->map[chosenY][chosenX].mutex);
+                }
             }
+        }
+    } 
+    // --- CASO 2: ES UNA ESTACIÓN (Posición fija por parámetro) ---
+    else if (clientInitialization->typeStored == STATION) {
+        // La estación ya sabe a dónde ir gracias a los argumentos de consola
+        chosenX = clientInitialization->a_station.pos_x;
+        chosenY = clientInitialization->a_station.pos_y;
 
-            wasPlaced = true;
+        if (chosenX >= 0 && chosenX < DEFAULT_MAP_WIDTH && chosenY >= 0 && chosenY < DEFAULT_MAP_HEIGHT) {
+            if (sem_trywait(&gameMap->map[chosenY][chosenX].mutex) == 0) {
+                if (gameMap->map[chosenY][chosenX].typeStored == EMPTY) {
+                    gameMap->map[chosenY][chosenX].typeStored = STATION;
+                    
+                    gameMap->map[chosenY][chosenX].a_station = clientInitialization->a_station;
+                    
+                    printf("[Servidor] Estación colocada con éxito en posición fija (%d, %d)\n", chosenX, chosenY);
+                } else {
+                    printf("[Servidor] Error: La posición (%d, %d) para la estación ya está ocupada.\n", chosenX, chosenY);
+                    sem_post(&gameMap->map[chosenY][chosenX].mutex);
+                }
+            }
+        } else {
+            printf("[Servidor] Error: Coordenadas de estación (%d, %d) fuera de los límites del mapa.\n", chosenX, chosenY);
         }
     }
 
     free(clientInitialization);
     return NULL;
+}
+int spawnStations() {
+    printf("[Servidor] Iniciando orquestación de %d estaciones espaciales...\n", NUMBER_STATIONS);
+
+    for (int i = 0; i < NUMBER_STATIONS; i++) {
+        int chosenX, chosenY;
+        bool wasPlaced = false;
+
+        while (!wasPlaced) {
+            chosenY = (rand() % (DEFAULT_MAP_HEIGHT - 2)) + 1;
+            chosenX = (rand() % (DEFAULT_MAP_WIDTH - 2)) + 1;
+
+            if (sem_trywait(&gameMap->map[chosenY][chosenX].mutex) == 0) {
+                if (gameMap->map[chosenY][chosenX].typeStored == EMPTY) {
+                    
+                    // Reservamos el casillero en el mapa para la estación
+                    gameMap->map[chosenY][chosenX].typeStored = STATION;
+                    
+                    // Dejamos el semáforo de la celda bloqueado (en 0) para resguardar la estación.
+                    // Ya no llamamos a sem_post sobre esta celda.
+                    wasPlaced = true;
+                } else {
+                    printf("[Servidor] Error: La posición (%d, %d) para la estación ya está ocupada.\n", chosenX, chosenY);
+                    sem_post(&gameMap->map[chosenY][chosenX].mutex);
+                }
+            }
+        }
+
+        // 2. Convertimos las coordenadas numéricas a strings para pasarlas por argv
+        char argX[10];
+        char argY[10];
+        snprintf(argX, sizeof(argX), "%d", chosenX);
+        snprintf(argY, sizeof(argY), "%d", chosenY);
+
+        // 3. Bifurcamos el proceso con fork()
+        pid_t pid = fork();
+
+        if (pid < 0) {
+            perror("Error al hacer fork para la estación");
+            return -1;
+        }
+
+        if (pid == 0) {
+            // --- CÓDIGO DEL PROCESO HIJO ---
+            // Reemplazamos la imagen del proceso actual por el ejecutable de la estación
+            // execl requiere: (ruta, nombre_proceso, arg1, arg2, ..., NULL)
+            execl("./bin/estacion", "estacion", argX, argY, (char *)NULL);
+            
+            // Si execl retorna, significa que hubo un error catastrófico (ej: no se encontró el ejecutable)
+            perror("Error en execl() de la estación. ¿Compilaste el binario `./estacion`?");
+            exit(1); 
+        }
+        
+        // --- CÓDIGO DEL PROCESO PADRE (Servidor) ---
+        // El servidor continúa el bucle inmediatamente para spawnear la siguiente estación
+        printf("[Servidor] Lanzado proceso hijo estación (PID aproximado: %d) hacia la posición (%d, %d)\n", pid, chosenX, chosenY);
+    }
+
+    return 0;
 }

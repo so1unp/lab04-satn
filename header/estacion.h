@@ -12,7 +12,7 @@
 /* --- Constantes del Sistema --- */
 #define MAX_HANGAR_CAPACITY 3
 #define CANT_ARGUMENTS 3
-#define TIME_OF_CONSUME_FUEL 1
+#define TIME_OF_CONSUME_FUEL 3
 
 /* --- Estructuras de Datos --- */
 
