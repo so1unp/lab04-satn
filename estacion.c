@@ -27,6 +27,10 @@ station my_station;
 /* --- Hilos de la Estacion --- */
 pthread_t thread_station;
 
+/* --- Colas de comunicacion --- */
+mqd_t cola_inicializacion = -1;
+mqd_t cola_aviso_poco_combustible = -1;
+
 
 /* --- Definición de Funciones --- */
 
@@ -55,12 +59,10 @@ void send_warning_message_servidor(station *a_station) {
         printf("Error: El puntero a_station es NULL\n");
         return;
     }
-    
-    mqd_t id_queue_mss;
 
     // Abre la cola de mensajes del servidor en modo solo escritura y No Bloqueante
-    id_queue_mss = mq_open(SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH, O_WRONLY | O_NONBLOCK); 
-    if (id_queue_mss == (mqd_t)-1) {
+    cola_aviso_poco_combustible = mq_open(SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH, O_WRONLY | O_NONBLOCK); 
+    if (cola_aviso_poco_combustible == (mqd_t)-1) {
         perror("Error al abrir la cola de mensajes del servidor");
         return;
     }
@@ -76,18 +78,18 @@ void send_warning_message_servidor(station *a_station) {
            msg.station_pid, msg.pos_x_station, msg.pos_y_station, msg.fuel_left);
 
     // Envío del mensaje casteado a const char* bajo el estándar POSIX
-    if (mq_send(id_queue_mss, (const char *)&msg, sizeof(msg_communication_station_warning), 0) == -1) {
+    if (mq_send(cola_aviso_poco_combustible, (const char *)&msg, sizeof(msg_communication_station_warning), 0) == -1) {
         if (errno == EAGAIN) {
             printf("Error: La cola de mensajes del servidor está llena. No se pudo enviar.\n");
         } else {
             perror("Error al enviar el mensaje mediante mq_send");
         }
-        mq_close(id_queue_mss);
+        mq_close(cola_aviso_poco_combustible);
         return;
     }
 
     printf("¡Mensaje enviado con éxito!\n");
-    mq_close(id_queue_mss);   
+    mq_close(cola_aviso_poco_combustible);   
 }
 
 /**
@@ -101,8 +103,8 @@ void consume_fuel(station *a_station) {
     }
     
     while (a_station->fuel > 0) {
-        sleep(TIME_OF_CONSUME_FUEL); // Demora el consumo simulando el tiempo transcurrido (4 segundos)
-        
+        int tiempo_espera = TIME_OF_CONSUME_FUEL + (rand() % 3);
+        sleep(tiempo_espera); // En vez de usar un tiempo fijo de consumo, variamos un poco la espera.
         a_station->fuel -= 10; 
         
         // Control de subdesbordamiento de combustible
@@ -143,6 +145,9 @@ void* run_station(void* arg) {
  * @brief Punto de entrada principal para el proceso de lanzamiento de la estación.
  */
 int main(int argc, char *argv[]) {
+
+    srand((unsigned int)(time(NULL) ^ getpid()));
+
     // Control de parámetros de entrada mínimos requeridos
     if (argc < CANT_ARGUMENTS) {   
         perror("uso: estacion <pos_x> <pos_y> \n");
@@ -159,7 +164,20 @@ int main(int argc, char *argv[]) {
     
     printf("Started station\n");
     inicializar_estacion(&my_station, pos_x, pos_y);
+
+    cola_inicializacion = mq_open(SERVER_CLIENT_INITIALIZATION_QUEUE_PATH, O_WRONLY);
+    if (cola_inicializacion == (mqd_t)-1) {
+        perror("Error abriendo cola de inicializacion");
+        exit(1);
+    }
     
+    msg_communication_initialization init_msg;
+    init_msg.typeStored = STATION;
+    init_msg.a_station = my_station; 
+    if (mq_send(cola_inicializacion, (const char*)&init_msg, sizeof(init_msg), 0) == -1) {
+        perror("Failed to send initialization message to server");
+        exit(1);
+    }
     // Lanzamiento y gestión del hilo operativo de la estación
     if (pthread_create(&thread_station, NULL, run_station, &my_station) != 0) {
         perror("Error creating thread station");
@@ -168,6 +186,13 @@ int main(int argc, char *argv[]) {
     
     // Bloquea el proceso principal hasta que la estación termine sus operaciones
     pthread_join(thread_station, NULL);
+
+    if (cola_aviso_poco_combustible != (mqd_t)-1) {
+        mq_close(cola_aviso_poco_combustible);
+    }
+    if (cola_inicializacion != (mqd_t)-1) {
+        mq_close(cola_inicializacion);
+    }
 
     printf("\nFinalizando proceso.\n");
     return 0;

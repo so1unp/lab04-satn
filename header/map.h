@@ -2,6 +2,7 @@
 #define MAP_H
 
 #include <nave.h>
+#include <estacion.h>
 #include <asteroid.h>
 #include <pthread.h>
 #include <defaultconfig.h>
@@ -10,8 +11,8 @@
 typedef struct {
     EntityType typeStored;
     t_nave ship;
+    station a_station;
     Asteroid asteroid;
-    //STATION
     sem_t mutex;
 } MapCell;
 
