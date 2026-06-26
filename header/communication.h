@@ -27,6 +27,7 @@ typedef struct {
 } msg_communication_extraction;
 
 typedef struct {
+    int station_pid;
     int pos_x_station;
     int pos_y_station;
     int fuel_left;
