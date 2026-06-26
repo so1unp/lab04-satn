@@ -24,6 +24,10 @@
 /* --- Variables Globales --- */
 station my_station;
 
+/* --- Hilos de la Estacion --- */
+pthread_t thread_station;
+
+
 /* --- Definición de Funciones --- */
 
 /**
@@ -46,7 +50,7 @@ void inicializar_estacion(station *a_station, int pos_x, int pos_y) {
  * @brief Abre la cola de mensajes del servidor de manera No Bloqueante y envía una alerta de estado.
  * @param a_station Puntero a la estación que origina la alerta.
  */
-void send_message_servidor(station *a_station) {
+void send_warning_message_servidor(station *a_station) {
     if (a_station == NULL) {
         printf("Error: El puntero a_station es NULL\n");
         return;
@@ -63,13 +67,13 @@ void send_message_servidor(station *a_station) {
 
     // Preparación del paquete de datos
     msg_communication_station_warning msg;
-    msg.stationPid = getpid();
+    msg.station_pid = getpid();
     msg.pos_x_station = a_station->pos_x;
     msg.pos_y_station = a_station->pos_y;
-    msg.fuel_station = a_station->fuel;
+    msg.fuel_left = a_station->fuel;
 
     printf("\n[Enviando al Servidor] PID: %d | Pos: (%d, %d) | Fuel: %d%%\n", 
-           msg.stationPid, msg.pos_x_station, msg.pos_y_station, msg.fuel_station);
+           msg.station_pid, msg.pos_x_station, msg.pos_y_station, msg.fuel_left);
 
     // Envío del mensaje casteado a const char* bajo el estándar POSIX
     if (mq_send(id_queue_mss, (const char *)&msg, sizeof(msg_communication_station_warning), 0) == -1) {
@@ -97,13 +101,17 @@ void consume_fuel(station *a_station) {
     }
     
     while (a_station->fuel > 0) {
-        sleep(2); // Demora el consumo simulando el tiempo transcurrido (2 segundos)
+        sleep(TIME_OF_CONSUME_FUEL); // Demora el consumo simulando el tiempo transcurrido (4 segundos)
         
         a_station->fuel -= 10; 
         
         // Control de subdesbordamiento de combustible
         if (a_station->fuel < 0) {
             a_station->fuel = 0;
+        }
+
+        if(a_station->fuel >= 0 && a_station->fuel < 40){
+            send_warning_message_servidor(a_station);
         }
 
         printf("[Estación] Combustible restante: %d%%\n", a_station->fuel);
@@ -126,7 +134,7 @@ void* run_station(void* arg) {
     printf("[Estación] ¡Alerta! Se agotó el combustible. Cerrando estación.\n");
     
     // Notifica el cierre por falta de insumos al servidor principal
-    send_message_servidor(a_station);
+    send_warning_message_servidor(a_station);
     
     return NULL;  
 }
@@ -153,7 +161,6 @@ int main(int argc, char *argv[]) {
     inicializar_estacion(&my_station, pos_x, pos_y);
     
     // Lanzamiento y gestión del hilo operativo de la estación
-    pthread_t thread_station;
     if (pthread_create(&thread_station, NULL, run_station, &my_station) != 0) {
         perror("Error creating thread station");
         exit(1);

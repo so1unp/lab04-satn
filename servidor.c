@@ -467,7 +467,7 @@ void *handleStationWarning(void *arg) {
             if (gameMap->map[i][j].typeStored == SHIP && gameMap->map[i][j].ship.estado == ESTADO_VIVO) {
                 snprintf(shipQueuePath, sizeof(shipQueuePath), "%s%d", SHIP_BASE_PATH, gameMap->map[i][j].ship.id);
 
-                mqd_t shipQueueFileDescriptor= mq_open(shipQueuePath, O_WRONLY);
+                mqd_t shipQueueFileDescriptor = mq_open(shipQueuePath, O_WRONLY);
                 
                 if (shipQueueFileDescriptor != (mqd_t)-1) {
                     if (mq_send(shipQueueFileDescriptor, (const char *)stationWarning, sizeof(msg_communication_station_warning), 0) == -1) {
