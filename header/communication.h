@@ -40,4 +40,8 @@ typedef struct {
     station a_station;
 } msg_communication_initialization;
 
+typedef struct {
+    pid_t shipPid;
+} msg_communication_logout;
+
 #endif 
