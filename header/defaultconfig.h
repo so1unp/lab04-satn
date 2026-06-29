@@ -8,6 +8,9 @@
 #define SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH "/station-warning-communication-queue-satn"
 #define SERVER_CLIENT_INITIALIZATION_QUEUE_PATH "/initialization-queue-satn"
 #define SHIP_BASE_PATH "/mq_nave_"
+
+#define SERVER_LOGOUT_COMMUNICATION_QUEUE_PATH "/logout-communication-queue-satn"
+
 #define PERMISSIONS 0660
 
 #define DEFAULT_AMOUNT_MESSAGES_QUEUES 100
@@ -19,6 +22,8 @@
 #define DEFAULT_MAXIMUM_QUANTITY_MUTEXIO 300
 #define DEFAULT_MAXIMUM_QUANTITY_SEMAFORITA 200
 #define DEFAULT_MAXIMUM_QUANTITY_KERNELIO 100
+
+#define DEFAULT_NUMBER_SHIPS 5
 
 typedef enum {
     EMPTY,

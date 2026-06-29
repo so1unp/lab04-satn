@@ -31,6 +31,8 @@ mqd_t cola_movimiento = -1;
 mqd_t cola_extraccion = -1;
 char mq_name[50];
 
+mqd_t logoutQueue;
+
 // Visual local de la nave controlada
 char caracter_nave = '^';
 volatile int juego_ejecutando = 1;
@@ -104,6 +106,12 @@ void conectar_ipc() {
         exit(1);
     }
 
+    logoutQueue = mq_open(SERVER_LOGOUT_COMMUNICATION_QUEUE_PATH, O_WRONLY);
+    if (logoutQueue == (mqd_t)-1) {
+        perror("Error abriendo cola cierre de sesión");
+        exit(1);
+    }
+
     // 2. Creación de la Cola de Mensajes única basada en el PID
     snprintf(mq_name, sizeof(mq_name), "/mq_nave_%d", getpid());
     
@@ -143,6 +151,10 @@ void desconectar_ipc() {
 
     if (cola_extraccion != (mqd_t)-1) {
         mq_close(cola_extraccion);
+    }
+
+    if (logoutQueue != (mqd_t)-1) {
+        mq_close(logoutQueue);
     }
 
 }
@@ -579,6 +591,13 @@ int main() {
                 case 'T':       enviar_comando('T'); break;
             }
         }
+    }
+
+    msg_communication_logout shipLogout;
+    shipLogout.shipPid = mi_nave.id;
+    if (mq_send(logoutQueue, (const char*)&shipLogout, sizeof(shipLogout), 0) == -1) {
+        perror("Failed to send communication ship logout");
+        exit(1);
     }
 
     // Apagado y limpieza total de recursos del Sistema Operativo

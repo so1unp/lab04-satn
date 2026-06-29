@@ -40,6 +40,10 @@ typedef struct {
     station a_station;
 } msg_communication_initialization;
 
+typedef struct {
+    pid_t shipPid;
+} msg_communication_logout;
+
 //Estructuras creadas para el trading
 
 typedef struct {
@@ -58,4 +62,4 @@ typedef struct {
     char message[50];
 } msg_trade_response;
 
-#endif 
+#endif

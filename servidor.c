@@ -30,11 +30,13 @@ mqd_t shipMovementCommunicationQueue;
 mqd_t shipExtractionCommunicationQueue;
 mqd_t stationWarningCommunicationQueue;
 mqd_t clientInitializationCommunicationQueue;
+mqd_t shipLogoutCommunicationQueue;
 
 pthread_t t_receiveShipMovementMessage;
 pthread_t t_receiveShipExtractionMessage;
 pthread_t t_receiveStationWarningMessage;
 pthread_t t_receiveClientInitializationMessage;
+pthread_t t_receiveShipLogoutMessage;
 
 int configurationReading();
 int generateAsteroids();
@@ -50,10 +52,18 @@ void *receiveShipMovementMessage();
 void *receiveShipExtractionMessage();
 void *receiveStationWarningMessage();
 void *receiveClientInitializationMessage();
+void *receiveShipLogoutMessage();
 void *handleShipExtraction(void *arg);
 void *handleShipMovement(void *arg);
 void *handleStationWarning(void *arg);
 void *handleClientInitialization(void *arg);
+void *handleShipLogout(void *arg);
+
+int numberShips = 0;
+
+pid_t shipRegistration[DEFAULT_NUMBER_SHIPS];
+
+pthread_mutex_t mutexRegistration;
 
 int main() {
 
@@ -197,6 +207,13 @@ int createQueues() {
         perror("Error creating warning queue");
         exit(1);
     }
+
+    attr.mq_msgsize = (1*sizeof(msg_communication_logout));
+    shipLogoutCommunicationQueue = mq_open(SERVER_LOGOUT_COMMUNICATION_QUEUE_PATH, O_CREAT | O_RDONLY, PERMISSIONS, &attr);
+    if (shipLogoutCommunicationQueue == (mqd_t)-1) {
+        perror("Error creating ship logout queue");
+        exit(1);
+    }
     return 0;
 }
 
@@ -236,6 +253,8 @@ int initializeSettings() {
     makeMap();
     createQueues();
 
+    pthread_mutex_init(&mutexRegistration, NULL);
+
     pids_stations = malloc(sizeof(pid_t)*(size_t)NUMBER_STATIONS);
     if (pids_stations == NULL) {
         perror("Error al asignar memoria para pids_stations");
@@ -260,6 +279,10 @@ int initializeSettings() {
         perror("Failed to create thread for receiveStationWarningMessage");
     }
 
+    if (pthread_create(&t_receiveShipLogoutMessage,NULL,(void *)receiveShipLogoutMessage,NULL) != 0) {
+        perror("Failed to create thread for receiveShipLogoutMessage");
+    }
+
     return 0;
 }
 
@@ -272,11 +295,15 @@ int closeSettings() {
     mq_unlink(SERVER_EXTRACTION_COMMUNICATION_QUEUE_PATH);
     mq_unlink(SERVER_STATION_WARNING_COMMUNICATION_QUEUE_PATH);
     mq_unlink(SERVER_CLIENT_INITIALIZATION_QUEUE_PATH);
+    mq_unlink(SERVER_LOGOUT_COMMUNICATION_QUEUE_PATH);
 
     pthread_cancel(t_receiveShipMovementMessage);
     pthread_cancel(t_receiveShipExtractionMessage);
     pthread_cancel(t_receiveStationWarningMessage);
     pthread_cancel(t_receiveClientInitializationMessage);
+    pthread_cancel(t_receiveShipLogoutMessage);
+
+    pthread_mutex_destroy(&mutexRegistration);
 
     destroy_procces_stations();
 
@@ -542,6 +569,22 @@ void *handleClientInitialization(void *arg) {
 
     // --- CASO 1: ES UNA NAVE (Spawn Aleatorio) ---
     if (clientInitialization->typeStored == SHIP) {
+        pthread_mutex_lock(&mutexRegistration);
+        if (numberShips < DEFAULT_NUMBER_SHIPS) {
+            for (int i = 0; i < DEFAULT_NUMBER_SHIPS; i++) {
+                if (shipRegistration[i] == 0) {
+                    shipRegistration[i] = clientInitialization->ship.id;
+                    numberShips++;
+                    break;
+                }
+            } 
+            pthread_mutex_unlock(&mutexRegistration);
+        } else {
+            pthread_mutex_unlock(&mutexRegistration);
+            fprintf(stderr, "[Servidor] Nave rechazada: límite de naves alcanzado.\n");
+            free(clientInitialization);
+            return NULL;
+        }
         while (!wasPlaced) {
 
             chosenY = (rand() % (DEFAULT_MAP_HEIGHT - 2)) + 1;
@@ -592,6 +635,71 @@ void *handleClientInitialization(void *arg) {
     free(clientInitialization);
     return NULL;
 }
+
+void *receiveShipLogoutMessage() {
+    msg_communication_logout message;
+    while (1) {
+        ssize_t n = mq_receive(shipLogoutCommunicationQueue, (char *)&message, sizeof(message), 0);
+        if (n == -1) {
+            perror("While receiving message from ship logout queue");
+            exit(1);
+        }
+
+        if (n == sizeof(message)) {
+            printf("received a message from the ship logout queue\n");
+
+            msg_communication_logout *shipLogout = malloc(sizeof(message));
+            if (shipLogout == NULL) {
+                perror("Failed to allocate memory for handleShipLogout thread");
+                exit(1);
+            }
+
+            *shipLogout = message;
+            pthread_t t_handleShipLogout;
+            if (pthread_create(&t_handleShipLogout, NULL, (void *)handleShipLogout, shipLogout) != 0) {
+                perror("Failed to create thread for handleShiplogout");
+                free(shipLogout);
+                continue;
+            }
+
+            pthread_detach(t_handleShipLogout);
+        }
+
+    }
+}
+
+void *handleShipLogout(void *arg) {
+    msg_communication_logout *shipLogout = (msg_communication_logout *)arg;
+
+    pthread_mutex_lock(&mutexRegistration);
+    for (int i = 0; i < DEFAULT_NUMBER_SHIPS; i++) {
+        if (shipRegistration[i] == shipLogout->shipPid) {
+            shipRegistration[i] = 0;
+            numberShips--;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&mutexRegistration);
+
+    bool foundShip = false;
+    for (int i = 0; i < DEFAULT_MAP_HEIGHT; i++) {
+        for (int j = 0; j < DEFAULT_MAP_WIDTH; j++) {
+            if (gameMap->map[i][j].typeStored == SHIP && gameMap->map[i][j].ship.id == shipLogout->shipPid) {
+                gameMap->map[i][j].typeStored = EMPTY;
+                sem_post(&gameMap->map[i][j].mutex);
+                foundShip = true;
+                break;
+            }
+        } 
+
+        if (foundShip == true) break;
+    }
+
+    free(shipLogout);
+    return NULL;
+}
+
+
 int spawnStations() {
     printf("[Servidor] Iniciando orquestación de %d estaciones espaciales...\n", NUMBER_STATIONS);
 
