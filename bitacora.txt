@@ -32,3 +32,11 @@
 [TRANSACTION] Estacion (20,17) -> Nave PID 19229 | Minerales Recibidos: D:5, M:5, S:5, K:5 | Status: OK
 [TRANSACTION] Estacion (20,17) -> Nave PID 17312 | Minerales Recibidos: D:5, M:5, S:5, K:5 | Status: OK
 [TRANSACTION] Estacion (20,17) -> Nave PID 19229 | Minerales Recibidos: D:5, M:5, S:5, K:5 | Status: OK
+[TRANSACTION] Estacion (20,3) -> Nave PID 10981 | Minerales Recibidos: D:5, M:5, S:5, K:5 | Status: OK
+[TRANSACTION] Estacion (20,3) -> Nave PID 10981 | Minerales Recibidos: D:5, M:5, S:5, K:5 | Status: OK
+[TRANSACTION] Estacion (20,3) -> Nave PID 10981 | Minerales Recibidos: D:5, M:5, S:5, K:5 | Status: OK
+[TRANSACTION] Estacion (20,3) -> Nave PID 10981 | Minerales Recibidos: D:5, M:5, S:5, K:5 | Status: OK
+[TRANSACTION] Estacion (20,3) -> Nave PID 10981 | Minerales Recibidos: D:5, M:5, S:5, K:5 | Status: OK
+[TRANSACTION] Estacion (20,3) -> Nave PID 10981 | Minerales Recibidos: D:20, M:20, S:20, K:20 | Status: OK
+[TRANSACTION] Estacion (20,3) -> Nave PID 10981 | Minerales Recibidos: D:5, M:5, S:5, K:0 | Status: OK
+[TRANSACTION] Estacion (12,10) -> Nave PID 18365 | Minerales Recibidos: D:10, M:10, S:10, K:10 | Status: OK

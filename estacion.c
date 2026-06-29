@@ -175,7 +175,7 @@ void consume_fuel(station *a_station) {
     }
 
     while (a_station->fuel > 0) {
-        int espera = TIME_OF_CONSUME_FUEL + (rand() % 3);
+        unsigned int espera = TIME_OF_CONSUME_FUEL + (unsigned int)(rand() % 3);
         sleep(espera);
 
         a_station->fuel -= 10;

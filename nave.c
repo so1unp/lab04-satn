@@ -529,6 +529,7 @@ int main() {
     sleep(1);
 
     inicializar_visuales();
+    timeout(100);
 
     pthread_create(&thread_visual, NULL, hilo_renderizador, (void*)&mi_nave);
     pthread_create(&thread_oxigeno, NULL, hilo_soporte_vital, (void*)&mi_nave);
@@ -537,11 +538,21 @@ int main() {
 
     // Bucle de Input: Lee teclas y las despacha por la Cola de Mensajes
     while ((ch = getch()) != TECLA_SALIR) {
-        
         ch = toupper(ch);
+        // Chequear game over independientemente de si hubo tecla
+        pthread_mutex_lock(&mutex_nave);
+        if (mi_nave.combustible <= 0) {
+            mi_nave.combustible = 0;
+            mi_nave.estado      = ESTADO_GAMEOVER_COMBUSTIBLE;
+        }
+        int estado_actual = mi_nave.estado;
+        pthread_mutex_unlock(&mutex_nave);
+
+        if (estado_actual != ESTADO_VIVO) break;
+        if (ch == TECLA_SALIR)           break;
         
         pthread_mutex_lock(&mutex_nave);
-        int puede_moverse = (mi_nave.estado == ESTADO_VIVO && mi_nave.combustible > 0);
+        int puede_moverse = (mi_nave.combustible > 0);
         
         if (puede_moverse) {
             switch (ch) {
@@ -578,9 +589,39 @@ int main() {
     pthread_cancel(thread_aviso_estacion); 
     pthread_join(thread_aviso_estacion, NULL);
 
+    pthread_mutex_lock(&mutex_nave);
+    int estado_final = mi_nave.estado;
+    pthread_mutex_unlock(&mutex_nave);
+    
     finalizar_visuales();
     destruir_nave(&mi_nave);
     desconectar_ipc();
+
+
+
+    switch (estado_final) {
+        case ESTADO_GAMEOVER_OXIGENO:
+            printf("\n");
+            printf("  ┌─────────────────────────────────────┐\n");
+            printf("  │           GAME  OVER                │\n");
+            printf("  │   La tripulación quedó sin oxígeno  │\n");
+            printf("  │   La nave deriva sin control...     │\n");
+            printf("  └─────────────────────────────────────┘\n");
+            printf("\n");
+            break;
+        case ESTADO_GAMEOVER_COMBUSTIBLE:
+            printf("\n");
+            printf("  ┌─────────────────────────────────────┐\n");
+            printf("  │           GAME  OVER                │\n");
+            printf("  │   Los motores se apagaron           │\n");
+            printf("  │   La nave deriva sin control...     │\n");
+            printf("  └─────────────────────────────────────┘\n");
+            printf("\n");
+            break;
+        default:
+            printf("\n  Hasta la próxima, comandante.\n\n");
+            break;
+    }
 
     return 0;
 }
