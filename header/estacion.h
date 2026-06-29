@@ -8,6 +8,7 @@
 
 #include <stdbool.h>
 #include <sys/types.h>
+#include <semaphore.h> 
 
 /* --- Constantes del Sistema --- */
 #define MAX_HANGAR_CAPACITY 3
@@ -31,6 +32,9 @@ typedef struct {
 
     bool fuelWarningSent;                /**< Indicador de si ya se envió la alerta de bajo combustible */
     bool isDestroyed;                    /**< Estado vital de la estación (true si colapsó o fue destruida) */
+    bool ship_message;                    
+
+    sem_t hangar_sem; /**< Semáforo contador: limita a MAX_HANGAR_CAPACITY naves simultáneas */
 } station;
 
 /* --- Prototipos de Funciones --- */

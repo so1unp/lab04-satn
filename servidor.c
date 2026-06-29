@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <mqueue.h>
 #include <asteroid.h>
+#include <signal.h>
 
 int NUMBER_STATIONS = 0;
 int NUMBER_ASTEROIDS = 0;
@@ -18,6 +19,8 @@ int MAXIMUM_QUANTITY_DEUTERIO = 0;
 int MAXIMUM_QUANTITY_MUTEXIO = 0;
 int MAXIMUM_QUANTITY_SEMAFORITA = 0;
 int MAXIMUM_QUANTITY_KERNELIO = 0;
+// Inicializo en NULL por posible basura en direccion de memoria
+pid_t *pids_stations = NULL;
 
 Map *gameMap;
 int sharedMemoryFd;
@@ -41,7 +44,7 @@ int printMapOnStandardOutput();
 int initializeSettings();
 int closeSettings();
 int spawnStations();
-
+void destroy_procces_stations();
 
 void *receiveShipMovementMessage();
 void *receiveShipExtractionMessage();
@@ -53,6 +56,7 @@ void *handleStationWarning(void *arg);
 void *handleClientInitialization(void *arg);
 
 int main() {
+
     umask(0000);
     srand((unsigned int)time(NULL));
     int endSignal = 0;  
@@ -230,8 +234,15 @@ int printMapOnStandardOutput() {
 int initializeSettings() {
     configurationReading();
     makeMap();
-    spawnStations();
     createQueues();
+
+    pids_stations = malloc(sizeof(pid_t)*(size_t)NUMBER_STATIONS);
+    if (pids_stations == NULL) {
+        perror("Error al asignar memoria para pids_stations");
+        exit(1);
+    }
+
+    spawnStations();
 
     if (pthread_create(&t_receiveShipMovementMessage,NULL,(void *)receiveShipMovementMessage,NULL) != 0) {
         perror("Failed to create thread for receiveShipMovementMessage");
@@ -266,6 +277,10 @@ int closeSettings() {
     pthread_cancel(t_receiveShipExtractionMessage);
     pthread_cancel(t_receiveStationWarningMessage);
     pthread_cancel(t_receiveClientInitializationMessage);
+
+    destroy_procces_stations();
+
+    free(pids_stations);
 
     return 0;
 }
@@ -553,7 +568,6 @@ void *handleClientInitialization(void *arg) {
     } 
     // --- CASO 2: ES UNA ESTACIÓN (Posición fija por parámetro) ---
     else if (clientInitialization->typeStored == STATION) {
-        // La estación ya sabe a dónde ir gracias a los argumentos de consola
         chosenX = clientInitialization->a_station.pos_x;
         chosenY = clientInitialization->a_station.pos_y;
 
@@ -563,7 +577,7 @@ void *handleClientInitialization(void *arg) {
                     gameMap->map[chosenY][chosenX].typeStored = STATION;
                     
                     gameMap->map[chosenY][chosenX].a_station = clientInitialization->a_station;
-                    
+
                     printf("[Servidor] Estación colocada con éxito en posición fija (%d, %d)\n", chosenX, chosenY);
                 } else {
                     printf("[Servidor] Error: La posición (%d, %d) para la estación ya está ocupada.\n", chosenX, chosenY);
@@ -605,14 +619,16 @@ int spawnStations() {
             }
         }
 
-        // 2. Convertimos las coordenadas numéricas a strings para pasarlas por argv
+        //Convertimos las coordenadas numéricas a strings para pasarlas por argv
         char argX[10];
         char argY[10];
         snprintf(argX, sizeof(argX), "%d", chosenX);
         snprintf(argY, sizeof(argY), "%d", chosenY);
 
-        // 3. Bifurcamos el proceso con fork()
+        //Bifurcamos el proceso con fork()
         pid_t pid = fork();
+
+        pids_stations[i] = pid; 
 
         if (pid < 0) {
             perror("Error al hacer fork para la estación");
@@ -620,12 +636,7 @@ int spawnStations() {
         }
 
         if (pid == 0) {
-            // --- CÓDIGO DEL PROCESO HIJO ---
-            // Reemplazamos la imagen del proceso actual por el ejecutable de la estación
-            // execl requiere: (ruta, nombre_proceso, arg1, arg2, ..., NULL)
             execl("./bin/estacion", "estacion", argX, argY, (char *)NULL);
-            
-            // Si execl retorna, significa que hubo un error catastrófico (ej: no se encontró el ejecutable)
             perror("Error en execl() de la estación. ¿Compilaste el binario `./estacion`?");
             exit(1); 
         }
@@ -636,4 +647,12 @@ int spawnStations() {
     }
 
     return 0;
+}
+void destroy_procces_stations(){
+    for(int i = 0; i < NUMBER_STATIONS; i++){
+        if (pids_stations[i] > 0) {
+            kill(pids_stations[i], SIGTERM);
+        }
+    }
+    exit(0);
 }
