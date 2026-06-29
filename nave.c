@@ -9,6 +9,7 @@
 #include "nave.h"
 #include "map.h"
 #include "communication.h"
+#include <ctype.h> // toupper()
 
 #define TECLA_SALIR 'q'
 #define TECLA_MINAR 'm'
@@ -19,6 +20,7 @@ void* hilo_soporte_vital(void* arg);
 void* hilo_aviso_estacion();
 int obtener_posicion_shm(int *actualX, int *actualY);
 int buscar_entidad_adyacente(int shipX, int shipY, EntityType objetivo, int *targetX, int *targetY);
+void comercializar_estacion(int shipX, int shipY);
 
 // Variables globales para IPC
 Map *gameMap = NULL;
@@ -204,7 +206,10 @@ void renderizar_universo_shm(t_nave* nave) {
                 mvaddch(mapa_start_y + y, mapa_start_x + x, (chtype)'A');
             }
             else if (gameMap->map[y][x].typeStored == STATION) {
-                mvaddch(mapa_start_y + y, mapa_start_x + x, (chtype)'E');
+                if (gameMap->map[y][x].a_station.isDestroyed)
+                    mvaddch(mapa_start_y + y, mapa_start_x + x, (chtype)'X');
+                else
+                    mvaddch(mapa_start_y + y, mapa_start_x + x, (chtype)'E');
             }
             else {
                 if (y == 0 || y == DEFAULT_MAP_HEIGHT - 1 || x == 0 || x == DEFAULT_MAP_WIDTH - 1) {
@@ -346,6 +351,9 @@ void enviar_comando(char cmd) {
         case 'R':
             targetX += 1;
             break; // Right
+        case 'T':
+            comercializar_estacion(currentX, currentY);
+            break; // Trading
     }
 
     if (targetX >= 0 && targetX < DEFAULT_MAP_WIDTH && targetY >= 0 && targetY < DEFAULT_MAP_HEIGHT) {
@@ -393,7 +401,122 @@ int obtener_posicion_shm(int *actualX, int *actualY) {
     return 0;
 }
 
+/* ── helpers ─────────────────────────────────────────── */
 
+static void set_alerta(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(mensaje_alerta, sizeof(mensaje_alerta), fmt, ap);
+    va_end(ap);
+    timestamp_alerta = time(NULL);
+}
+
+static int inventario_vacio(void) {
+    pthread_mutex_lock(&mutex_nave);
+    int total = mi_nave.inventario.deuterio
+              + mi_nave.inventario.mutexio
+              + mi_nave.inventario.semaforita
+              + mi_nave.inventario.kernelio;
+    pthread_mutex_unlock(&mutex_nave);
+    return total == 0;
+}
+
+static int enviar_trade(mqd_t q_estacion) {
+    msg_trade_request req;
+    req.ship_pid = getpid();
+    req.type     = SELL_RESOURCES;
+
+    pthread_mutex_lock(&mutex_nave);
+    req.deuterio_to_sell   = mi_nave.inventario.deuterio;
+    req.mutexio_to_sell    = mi_nave.inventario.mutexio;
+    req.semaforita_to_sell = mi_nave.inventario.semaforita;
+    req.kernelio_to_sell   = mi_nave.inventario.kernelio;
+    pthread_mutex_unlock(&mutex_nave);
+
+    if (mq_send(q_estacion, (const char *)&req, sizeof(req), 0) == -1) {
+        perror("Error enviando trade a la estación");
+        return -1;
+    }
+    return 0;
+}
+
+static void vaciar_inventario(int shipX, int shipY) {
+    pthread_mutex_lock(&mutex_nave);
+    mi_nave.combustible           = 100;
+    mi_nave.oxigeno               = 100;
+    mi_nave.inventario.deuterio   = 0;
+    mi_nave.inventario.mutexio    = 0;
+    mi_nave.inventario.semaforita = 0;
+    mi_nave.inventario.kernelio   = 0;
+    pthread_mutex_unlock(&mutex_nave);
+
+    if (sem_wait(&gameMap->map[shipY][shipX].ship.mutex) == 0) {
+        gameMap->map[shipY][shipX].ship.inventario.deuterio   = 0;
+        gameMap->map[shipY][shipX].ship.inventario.mutexio    = 0;
+        gameMap->map[shipY][shipX].ship.inventario.semaforita = 0;
+        gameMap->map[shipY][shipX].ship.inventario.kernelio   = 0;
+        sem_post(&gameMap->map[shipY][shipX].ship.mutex);
+    }
+}
+
+/* ── función principal ───────────────────────────────── */
+
+void comercializar_estacion(int shipX, int shipY) {
+    int stationX = 0, stationY = 0;
+
+    if (buscar_entidad_adyacente(shipX, shipY, STATION, &stationX, &stationY) != 1)
+        return;
+
+    if (inventario_vacio()) {
+        set_alerta("Sin minerales para comerciar.");
+        return;
+    }
+
+    station *est = &(gameMap->map[stationY][stationX].a_station);
+
+    if (est->isDestroyed) {
+        set_alerta("Estacion [%d,%d] destruida.", stationX, stationY);
+        return;
+    }
+
+    if (sem_trywait(&est->hangar_sem) == -1) {
+        set_alerta("Hangar LLENO (Max 3 naves). Intente luego.");
+        return;
+    }
+
+    // Re-verificar tras adquirir el semáforo (race condition)
+    if (est->isDestroyed) {
+        sem_post(&est->hangar_sem);
+        set_alerta("Estacion [%d,%d] se apago antes de comerciar.", stationX, stationY);
+        return;
+    }
+
+    set_alerta("En Hangar [%d,%d]. Comerciando...", stationX, stationY);
+
+    char q_name[64];
+    snprintf(q_name, sizeof(q_name), "/mq_estacion_%d_%d", stationX, stationY);
+
+    mqd_t q_estacion = mq_open(q_name, O_WRONLY);
+    if (q_estacion == (mqd_t)-1) {
+        perror("mq_open cola estación");
+        sem_post(&est->hangar_sem);
+        return;
+    }
+
+    if (enviar_trade(q_estacion) == -1) {
+        mq_close(q_estacion);
+        sem_post(&est->hangar_sem);
+        return;
+    }
+
+    mq_close(q_estacion);
+    sleep(2);
+
+    vaciar_inventario(shipX, shipY);
+
+    sem_post(&est->hangar_sem);
+    set_alerta("Trade exitoso. Saliendo del hangar.");
+}
 
 // --- PROGRAMA PRINCIPAL ---
 
@@ -418,6 +541,7 @@ int main() {
     sleep(1);
 
     inicializar_visuales();
+    timeout(100);
 
     pthread_create(&thread_visual, NULL, hilo_renderizador, (void*)&mi_nave);
     pthread_create(&thread_oxigeno, NULL, hilo_soporte_vital, (void*)&mi_nave);
@@ -426,9 +550,21 @@ int main() {
 
     // Bucle de Input: Lee teclas y las despacha por la Cola de Mensajes
     while ((ch = getch()) != TECLA_SALIR) {
+        ch = toupper(ch);
+        // Chequear game over independientemente de si hubo tecla
+        pthread_mutex_lock(&mutex_nave);
+        if (mi_nave.combustible <= 0) {
+            mi_nave.combustible = 0;
+            mi_nave.estado      = ESTADO_GAMEOVER_COMBUSTIBLE;
+        }
+        int estado_actual = mi_nave.estado;
+        pthread_mutex_unlock(&mutex_nave);
+
+        if (estado_actual != ESTADO_VIVO) break;
+        if (ch == TECLA_SALIR)           break;
         
         pthread_mutex_lock(&mutex_nave);
-        int puede_moverse = (mi_nave.estado == ESTADO_VIVO && mi_nave.combustible > 0);
+        int puede_moverse = (mi_nave.combustible > 0);
         
         if (puede_moverse) {
             switch (ch) {
@@ -438,6 +574,7 @@ int main() {
                 case KEY_RIGHT: caracter_nave = '>'; mi_nave.combustible -= 2; break;
                 case TECLA_MINAR:
                 case 'M':                            mi_nave.combustible -= 5; break;
+                case 'T':                            mi_nave.combustible -= 1; break;
                 default:        puede_moverse = 0;                             break;
             }
         }
@@ -451,6 +588,7 @@ int main() {
                 case KEY_RIGHT: enviar_comando('R'); break;
                 case TECLA_MINAR:
                 case 'M':       enviar_comando('M'); break;
+                case 'T':       enviar_comando('T'); break;
             }
         }
     }
@@ -470,9 +608,39 @@ int main() {
     pthread_cancel(thread_aviso_estacion); 
     pthread_join(thread_aviso_estacion, NULL);
 
+    pthread_mutex_lock(&mutex_nave);
+    int estado_final = mi_nave.estado;
+    pthread_mutex_unlock(&mutex_nave);
+    
     finalizar_visuales();
     destruir_nave(&mi_nave);
     desconectar_ipc();
+
+
+
+    switch (estado_final) {
+        case ESTADO_GAMEOVER_OXIGENO:
+            printf("\n");
+            printf("  ┌─────────────────────────────────────┐\n");
+            printf("  │           GAME  OVER                │\n");
+            printf("  │   La tripulación quedó sin oxígeno  │\n");
+            printf("  │   La nave deriva sin control...     │\n");
+            printf("  └─────────────────────────────────────┘\n");
+            printf("\n");
+            break;
+        case ESTADO_GAMEOVER_COMBUSTIBLE:
+            printf("\n");
+            printf("  ┌─────────────────────────────────────┐\n");
+            printf("  │           GAME  OVER                │\n");
+            printf("  │   Los motores se apagaron           │\n");
+            printf("  │   La nave deriva sin control...     │\n");
+            printf("  └─────────────────────────────────────┘\n");
+            printf("\n");
+            break;
+        default:
+            printf("\n  Hasta la próxima, comandante.\n\n");
+            break;
+    }
 
     return 0;
 }

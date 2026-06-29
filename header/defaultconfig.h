@@ -32,4 +32,11 @@ typedef enum {
     STATION
 } EntityType;
 
+typedef enum { 
+    REQUEST_TRADE, 
+    REFUEL_FUEL, 
+    REFUEL_OXYGEN, 
+    SELL_RESOURCES 
+} TradeType;
+
 #endif

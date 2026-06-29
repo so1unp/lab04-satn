@@ -44,4 +44,22 @@ typedef struct {
     pid_t shipPid;
 } msg_communication_logout;
 
-#endif 
+//Estructuras creadas para el trading
+
+typedef struct {
+    pid_t ship_pid;
+    TradeType type;
+    int deuterio_to_sell;
+    int mutexio_to_sell;
+    int semaforita_to_sell;
+    int kernelio_to_sell;
+} msg_trade_request;
+
+typedef struct {
+    bool success;
+    int fuel_refueled;
+    int oxygen_refueled;
+    char message[50];
+} msg_trade_response;
+
+#endif
